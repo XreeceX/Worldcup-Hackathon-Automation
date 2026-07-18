@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: commitment-postgres
+    environment:
+      POSTGRES_USER: commitment
+      POSTGRES_PASSWORD: commitment
+      POSTGRES_DB: commitment
+    ports:
+      # Host port 5433 — 5432 is occupied by another local Postgres container.
+      - "5433:5432"
+    volumes:
+      - commitment_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U commitment -d commitment"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  commitment_pgdata:

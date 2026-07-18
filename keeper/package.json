@@ -1,0 +1,20 @@
+{
+  "name": "keeper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Social Commitment Engine keeper — TxLINE-driven auto-resolution service",
+  "main": "src/index.mjs",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test test/unit.test.mjs"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "axios": "^1.7.0",
+    "bn.js": "^5.2.1",
+    "cors": "^2.8.5",
+    "eventsource": "^3.0.0",
+    "express": "^4.21.0"
+  }
+}
