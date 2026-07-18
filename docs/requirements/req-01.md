@@ -41,18 +41,19 @@ The Social Commitment Engine is an on-chain protocol that lets fans and fan comm
 - FR-1.2 — A commitment must specify: the fixture, the condition, a beneficiary address, and an initial deposit amount. The fixture's kickoff timestamp must be recorded on-chain at creation time.
 - FR-1.3 — A DAO Founder must be able to create a group commitment with the same required fields, leaving membership open until kickoff.
 - FR-1.4 — Individual and group commitments must share the same condition and resolution mechanics.
-- FR-1.5 — At creation time, the protocol must verify that the beneficiary address has an associated USDC token account (ATA). The `create` instruction must reject if no ATA is found. This ensures the beneficiary can receive funds before any deposit is accepted.
+- FR-1.5 — The deposit currency is devnet SOL. No token mint, associated token account, or SPL token program interaction is required at any point in the protocol. The vault holds lamports; settlement and refunds use system program transfers.
 
-> **Rationale (FR-1.5):** The verification does not prove identity or consent — it proves capability. The failure mode it prevents is a commitment that resolves YES but cannot pay out because the beneficiary address is wrong, dormant, or belongs to a program that cannot accept token transfers. A whitelist or opt-in registry would add centralisation overhead without providing on-chain enforcement. An ATA check is self-contained, requires no admin, and catches the class of errors that would actually break the product.
+### FR-2: Condition Templates
 
-### FR-2: Condition Composition
+- FR-2.1 — Conditions must be selected from a fixed set of templates presented in human-readable form. There is no free-form condition composer.
+- FR-2.2 — The initial template set is:
+  - **Both teams score** — home goals > 0 AND away goals > 0
+  - **Total goals ≥ N** — total goals at full time ≥ a pledger-specified integer N
+  - **Team wins** — blocked pending OQ-1; must not be exposed until the correct TxLINE stat key is confirmed (see Open Questions)
+- FR-2.3 — The template set is designed to be expandable. Adding a new template must not require changes to the resolution or proof pipeline — only a new `validateStatV2` payload mapping.
+- FR-2.4 — Conditions must be immutable once the commitment is created. There is no edit window before kickoff.
 
-- FR-2.1 — Conditions must be expressible in human-readable form (e.g. template-based UI selection).
-- FR-2.2 — The system must support single-stat conditions (one predicate over one stat key).
-- FR-2.3 — The system must support multi-stat conditions (multiple predicates combined with AND logic).
-- FR-2.4 — Supported stat types must include at minimum: goals (per team), red cards, corners, and half-period goal breakdowns.
-- FR-2.5 — Conditions must be immutable once the commitment locks at kickoff.
-- FR-2.6 — Match outcome (win/loss/draw) may only be exposed as a condition template once OQ-1 is resolved. Condition templates must not expose ambiguous predicates.
+> **Rationale:** A composable condition language (multi-leg AND logic across arbitrary stat keys) adds UI, proof construction, and testing surface that is invisible in a 5-minute demo video. Fixed templates convey the same concept — a fan picks a condition, funds lock, funds move — with a fraction of the build cost. Expandability is preserved by keeping the template-to-payload mapping as the only extension point.
 
 ### FR-3: Group Membership
 
@@ -86,7 +87,7 @@ OPEN → RESOLVED_YES | RESOLVED_NO → EXECUTED | REFUNDED
 - **RESOLVED_NO** — condition verified as not met; commitment enters REFUNDED state.
 - **EXECUTED** — terminal state reached after RESOLVED_YES. Beneficiary has received funds.
 - **REFUNDED** — terminal state reached after RESOLVED_NO. Vault funds are claimable by members individually. Funds are not automatically pushed; each member calls `claim_refund`.
-- **VOID** — fixture cancelled; all vault funds are claimable by members via the same `claim_refund` instruction.
+- **VOID** — fixture cancelled or timed out; all vault funds are claimable by members via the same `claim_refund` instruction.
 
 No state may be skipped or reversed. There is no discrete LOCKED state — the kickoff timestamp enforces the boundary implicitly.
 
@@ -122,7 +123,7 @@ Settlement uses a hybrid push/pull model to remain scalable regardless of DAO si
 - FR-7.4 — A member's `claim_refund` call must be executable at any time after REFUNDED state is reached, independent of other members claiming.
 - FR-7.5 — Unclaimed refunds must remain claimable indefinitely. There is no expiry window. A vault account remains open until all members have claimed.
 
-> **Rationale (FR-7.5):** An expiry window creates deadline anxiety and the possibility of members permanently losing funds due to inattention. The only downside of indefinite claimability is that partially-claimed vault accounts cannot be closed on-chain (Solana requires an account to be empty before reclaiming its rent reserve, ~0.002 SOL per vault). This rent accumulation is negligible at hackathon and small-scale production use; the user experience benefit outweighs it.
+> **Rationale (FR-7.5):** An expiry window creates deadline anxiety and the possibility of members permanently losing funds due to inattention. The only downside of indefinite claimability is that an unclaimed vault account cannot be closed on-chain until the deposit is withdrawn (Solana requires an account to be empty before reclaiming its rent reserve). This rent accumulation is negligible at hackathon and small-scale production use; the user experience benefit outweighs it.
 
 ### FR-8: Cancellation and Void
 
@@ -171,6 +172,16 @@ Settlement uses a hybrid push/pull model to remain scalable regardless of DAO si
 - FR-10.2 — Each event in the feed must link to the settlement transaction on a Solana block explorer.
 - FR-10.3 — The feed must distinguish individual settlements from group (DAO) settlements.
 
+### FR-15: In-Play Pledge Card
+
+- FR-15.1 — During a live match, the pledge card must display the current score in real time, updating without a page refresh.
+- FR-15.2 — The pledge card must display the live status of the pledger's condition against current match data — expressed in plain language (e.g. "Both teams have scored ✓", "1 of 2 goals needed", "Clean sheet so far").
+- FR-15.3 — The pledge card must display a live event log of match events relevant to the condition (e.g. goals, red cards) as they occur, with timestamp and team.
+- FR-15.4 — Condition status must have three visible states: **tracking** (still possible, not yet met), **met** (condition is satisfied with play still ongoing), **resolved** (match finalised, outcome confirmed).
+- FR-15.5 — Live data must be sourced from TxLINE's score stream. The frontend must not derive condition status from off-chain computation alone — it must reflect what TxLINE reports.
+
+> **Rationale:** Judging criterion #2 explicitly rewards a product that "responds to what's actively unfolding on the pitch." A pledge card that only changes at the final whistle fails this criterion outright — the product reads as a static escrow, not a live experience. The in-play card is what makes the stakes visible and emotionally connected to the match as it happens.
+
 ### FR-12: Pending Claim Notifications
 
 - FR-12.1 — When a commitment reaches REFUNDED or VOID state, every member with an unclaimed deposit must be notified that they have a pending refund to claim.
@@ -192,7 +203,8 @@ Settlement uses a hybrid push/pull model to remain scalable regardless of DAO si
 | NFR-2 | **Permissionless resolution** — the resolution path must remain live even if the original pledger is absent or unresponsive. |
 | NFR-3 | **Transparency** — all commitments, membership, and settlements are on-chain and publicly inspectable at any time. |
 | NFR-4 | **No counter-party** — the protocol must not match pledgers against opposing bets. Beneficiaries are defined at creation, not determined by an opposing party. |
-| NFR-5 | **Devnet scope** — all hackathon operations use Solana devnet and devnet USDC. Mainnet deployment is out of scope. |
+| NFR-5 | **Devnet scope** — all hackathon operations use Solana devnet and devnet SOL. Mainnet deployment is out of scope. |
+| NFR-6 | **Backend-agnostic escrow interface** — the frontend must interact with a single `ESCROW_MODE` interface that abstracts the underlying settlement path. The active path (on-chain Anchor program or keeper-custody) must be switchable without frontend changes. |
 
 ---
 
