@@ -6,6 +6,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
 import { Connection, Keypair, PublicKey, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import axios from "axios";
@@ -86,6 +87,19 @@ if (prior.txSig) {
   const userTokenAccount = getAssociatedTokenAddressSync(
     CONFIG.txlTokenMint, keypair.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
   );
+  // The subscribe ix requires the TxL ATA to exist, even for the free tier.
+  const ataInfo = await connection.getAccountInfo(userTokenAccount);
+  if (!ataInfo) {
+    const { Transaction, sendAndConfirmTransaction } = await import("@solana/web3.js");
+    const ataTx = new Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        keypair.publicKey, userTokenAccount, keypair.publicKey, CONFIG.txlTokenMint,
+        TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+      )
+    );
+    const ataSig = await sendAndConfirmTransaction(connection, ataTx, [keypair], { commitment: "confirmed" });
+    console.log("[4] TxL ATA created:", ataSig);
+  }
   txSig = await program.methods
     .subscribe(SERVICE_LEVEL_ID, DURATION_WEEKS)
     .accounts({

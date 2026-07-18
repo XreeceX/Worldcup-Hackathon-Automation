@@ -2,4 +2,10 @@ node_modules/
 .env
 .env.*
 !.env.example
+program/target/*
+!program/target/idl/
+program/target/deploy/commitment-keypair.json
+program/.anchor/
+.next/
+*.log
 _keys/
