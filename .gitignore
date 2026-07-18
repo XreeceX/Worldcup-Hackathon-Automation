@@ -44,3 +44,6 @@ Thumbs.db
 tmp/
 *.zip
 docs/research/*.err
+commitment-engine/target/
+commitment-engine/.anchor/
+commitment-engine/node_modules/
