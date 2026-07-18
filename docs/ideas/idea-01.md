@@ -148,20 +148,27 @@ Individual / Founder composes condition (UI template → validateStatV2 strategy
 
 ---
 
-## Track positioning
+## Track positioning — DECIDED 2026-07-18: Track 2 primary focus, Track 1 also submitted
 
-**Track 1** — the settlement infrastructure is the product:
+**Two submissions from one build. Focus = Track 2 (Consumer and Fan Experiences)**; Track 1 (Prediction Markets and Settlement, 18k pool) included as secondary with the same engine.
+
+**Track 1 framing** — the settlement infrastructure is the product:
 - On-chain escrow + `validateStatV2` CPI + keeper = oracle tooling
 - Group / DAO mode adds collective treasury + permissionless membership
 - Every resolution produces a verifiable Solana explorer link
 - No admin keys anywhere in the resolution path
 
-**Track 2** — the consumer experience sits on top:
-- Individual pledges are accessible to any fan
-- Group DAOs build community around teams
-- Public board + live feed makes settlement a social event
+**Track 2 framing (PRIMARY)** — the consumer experience sits on top. Full track brief + judging criteria: [../tracks/track-02-consumer-fan.md](../tracks/track-02-consumer-fan.md).
 
-The infrastructure qualifies for Track 1. The UX qualifies for Track 2. These are separate submissions if competing in both tracks.
+What that decision means for the build:
+- Lead with the **fan story** — pledge in three taps, watch the board live, see money move when the whistle blows. Cryptography is the trust layer, not the headline.
+- **UX polish is judging criterion #1** — frontend gets real time budget.
+- **Real-time responsiveness is criterion #2** — the public board and live feed must visibly react to SSE events in the demo.
+- **Wallet sign-in required by the track** ("sign up through Solana") — already native to the pledge flow.
+- Monetization story for the video: protocol fee on released pledges, brand-sponsored DAOs, white-label for causes.
+- The on-chain settlement engine stays — it is the originality criterion vs every other fan app — but framed as "no one has to trust us" rather than as infra.
+
+**Track 1 submission cost on top of Track 2 build:** second ≤5-min video (infra cut: escrow → proof → CPI → explorer links) + second tech doc. Same repo, same deployment. Budget ~2h at the end; if the clock burns, Track 2 ships alone.
 
 ---
 
