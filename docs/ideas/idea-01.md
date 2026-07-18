@@ -59,7 +59,7 @@ Commitment {
 | `lock` | At kickoff (auto or manual) | At kickoff — no new members after |
 | `resolve` | Permissionless after `game_finalised` | Same |
 | `claim` / `release` | Funds to beneficiary or refund | Pro-rata refund or full release to beneficiary |
-| `void` | Fixture cancelled (`GameState=6`) | Same |
+| `void` | Fixture cancellation verified via `validateFixture` CPI | Same |
 
 State machine: `OPEN → LOCKED → RESOLVED_YES | RESOLVED_NO → EXECUTED | REFUNDED`
 

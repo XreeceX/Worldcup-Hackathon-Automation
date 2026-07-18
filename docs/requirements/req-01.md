@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Social Commitment Engine is an on-chain protocol that lets fans and fan communities lock conditional pledges against World Cup match outcomes before a game starts. If the stated condition is met when the final whistle blows, the escrowed funds are automatically released to a pre-designated beneficiary. If not, funds are returned. Resolution is driven entirely by TxLINE's cryptographic proof of the match result — no admin, no committee, no manual override. The protocol is structurally distinct from betting: there is no counter-party, and pledgers are always rooting for the condition to be true.
+The Social Commitment Engine is an on-chain protocol that lets fans and fan communities lock conditional pledges against World Cup match outcomes before a game starts. If the stated condition is met when the final whistle blows, the escrowed funds are automatically released to a pre-designated beneficiary. If not, funds are returned. Resolution is driven by TxLINE's cryptographic proof of the match result — automated, verifiable on-chain, with no counter-party and no committee. The protocol is structurally distinct from betting: there is no counter-party, and pledgers are always rooting for the condition to be true.
 
 ---
 
@@ -29,11 +29,13 @@ The Social Commitment Engine is an on-chain protocol that lets fans and fan comm
 
 **Group (Fan DAO)** — a commitment with an open membership period. Any wallet that deposits before kickoff becomes a co-signer. Joining is the commitment — there is no separate vote.
 
-**Resolution** — the trustless, on-chain determination of whether a condition was met. Driven by TxLINE's Merkle proof, verifiable by anyone on Solana.
+**Resolution** — the automated, proof-driven determination of whether a condition was met. Driven by TxLINE's Merkle proof and verifiable on Solana.
 
 ---
 
 ## Functional Requirements
+
+> **Build priority note:** Implement individual commitments (FR-1, FR-2, FR-4–FR-8, FR-13) as the first vertical slice — this covers the full TxLINE proof pipeline and is a shippable product on its own. Group/DAO features (FR-3 and DAO-specific paths in FR-4, FR-7) are additive and should only be started once the individual loop is green end-to-end.
 
 ### FR-1: Commitment Creation
 
@@ -49,7 +51,7 @@ The Social Commitment Engine is an on-chain protocol that lets fans and fan comm
 - FR-2.2 — The initial template set is:
   - **Both teams score** — home goals > 0 AND away goals > 0
   - **Total goals ≥ N** — total goals at full time ≥ a pledger-specified integer N
-  - **Team wins** — blocked pending OQ-1; must not be exposed until the correct TxLINE stat key is confirmed (see Open Questions)
+  - **Team wins** — the selected team has more goals than the opponent at full time, including extra time. A match settled by penalty shootout after a draw does not satisfy this condition. The UI must disclose this limitation at condition selection time.
 - FR-2.3 — The template set is designed to be expandable. Adding a new template must not require changes to the resolution or proof pipeline — only a new `validateStatV2` payload mapping.
 - FR-2.4 — Conditions must be immutable once the commitment is created. There is no edit window before kickoff.
 
@@ -68,7 +70,7 @@ The Social Commitment Engine is an on-chain protocol that lets fans and fan comm
 - FR-3.8 — A member who has withdrawn may not rejoin the same commitment.
 - FR-3.9 — If the last member withdraws, the commitment must be automatically closed. No further instructions (join, resolve, void) may be called on a closed commitment.
 
-> **Rationale (FR-3.5):** The pull-based refund model (FR-7) eliminates the settlement compute problem, so the cap is not about atomicity. It exists to prevent spam (one entity flooding a DAO with dust-deposit wallets inflating member count) and to make account size predictable and pre-allocatable. 500 was chosen as generous enough for any realistic fan community while keeping the pre-allocated account footprint bounded at ~16KB.
+> **Rationale (FR-3.5):** The pull-based refund model (FR-7) eliminates the settlement compute problem, so the cap is not about atomicity. It exists to prevent spam (one entity flooding a DAO with dust-deposit wallets inflating member count) and to make account size predictable and pre-allocatable. 500 was chosen as generous enough for any realistic fan community while keeping the pre-allocated account footprint bounded at ~20KB.
 >
 > **Rationale (FR-3.6–3.9):** "Join = commit" is the social framing, but withholding the right to change one's mind before the game starts would deter participation. Withdrawal is scoped strictly to before kickoff — the same boundary enforced by lazy locking — so it cannot be used to escape a commitment once the match is underway. Allowing the founder to withdraw like any other member keeps the rules uniform; if they are the last member, closing the commitment avoids a permanently empty vault with no resolution path.
 
@@ -78,7 +80,7 @@ Commitments must transition through the following states only:
 
 ```
 OPEN → RESOLVED_YES | RESOLVED_NO → EXECUTED | REFUNDED
-  ├──→ VOID (fixture cancelled, verified via validateFixture CPI)
+  ├──→ VOID (fixture cancellation verified via validateFixture CPI)
   └──→ VOID (timeout: 7+ days past kickoff with no resolution)
 ```
 
@@ -103,6 +105,8 @@ No state may be skipped or reversed. There is no discrete LOCKED state — the k
 
 ### FR-6: Resolution
 
+> The following requirements apply fully when `ESCROW_MODE=on-chain`. In `ESCROW_MODE=keeper-custody`, FR-6.1 and FR-6.3 are satisfied by the keeper acting on a publicly verifiable TxLINE proof — see NFR-1.
+
 - FR-6.1 — Resolution must be permissionless — any wallet may trigger it; no designated role required.
 - FR-6.2 — Resolution must only be possible after TxLINE confirms the match as finalised.
 - FR-6.3 — Resolution must use TxLINE's on-chain cryptographic proof to verify the condition — no off-chain assertion or admin decision.
@@ -121,7 +125,7 @@ Settlement uses a hybrid push/pull model to remain scalable regardless of DAO si
 - FR-7.2 — The resolve transaction marks the commitment REFUNDED but does not transfer funds. Each member must individually claim their refund via a separate `claim_refund` instruction.
 - FR-7.3 — Each member's claimable amount must equal their pro-rata share of the vault, calculated from the deposit amount recorded at join time.
 - FR-7.4 — A member's `claim_refund` call must be executable at any time after REFUNDED state is reached, independent of other members claiming.
-- FR-7.5 — Unclaimed refunds must remain claimable indefinitely. There is no expiry window. A vault account remains open until all members have claimed.
+- FR-7.5 — Unclaimed refunds must remain claimable indefinitely. There is no expiry window. A vault account remains open until all members have claimed. When the final member claims, the vault account is closed and its rent reserve lamports are transferred to that claimant as part of the same instruction.
 
 > **Rationale (FR-7.5):** An expiry window creates deadline anxiety and the possibility of members permanently losing funds due to inattention. The only downside of indefinite claimability is that an unclaimed vault account cannot be closed on-chain until the deposit is withdrawn (Solana requires an account to be empty before reclaiming its rent reserve). This rent accumulation is negligible at hackathon and small-scale production use; the user experience benefit outweighs it.
 
@@ -139,10 +143,42 @@ Settlement uses a hybrid push/pull model to remain scalable regardless of DAO si
 >
 > **Rationale (FR-8.6–8.7):** If TxLINE never emits `game_finalised` — due to an outage, a disputed match, or an indefinite postponement — a commitment sits in OPEN state post-kickoff with funds frozen and no resolution path. A 7-day timeout gives members a guaranteed exit without relying on any external signal. Using the on-chain clock means the timeout is self-contained and requires no oracle input, unlike resolution and void which depend on TxLINE proofs.
 
+### FR-9: Public Board
+
+- FR-9.1 — All commitments must be publicly visible to any visitor without a wallet connection.
+- FR-9.2 — Each commitment listing must display: condition (human-readable), beneficiary, total pledged amount, member count, and current status.
+- FR-9.3 — The board must be browsable before, during, and after a match.
+- FR-9.4 — The board should support filtering and sorting by: pledged amount, condition type, beneficiary, and group size.
+
+### FR-10: Live Settlement Feed
+
+- FR-10.1 — The system must surface resolution events in real time as they occur on-chain.
+- FR-10.2 — Each event in the feed must link to the settlement transaction on a Solana block explorer.
+- FR-10.3 — The feed must distinguish individual settlements from group (DAO) settlements.
+
+### FR-11: Wallet Sign-In
+
+- FR-11.1 — The frontend must integrate the Solana wallet adapter. Supported wallets at minimum: Phantom, Solflare, Backpack.
+- FR-11.2 — A wallet connection is required to perform any write action: creating a commitment, joining a group, withdrawing, claiming a refund, and triggering resolve or void.
+- FR-11.3 — Wallet connection must not be required to browse the public board or view commitment details (FR-9.1).
+- FR-11.4 — The connected wallet address must be used as the pledger/member identity on-chain. No separate account creation or username is required.
+- FR-11.5 — The UI must clearly surface the connected wallet address and provide a disconnect option at all times when a wallet is connected.
+
+### FR-12: Pending Claim Notifications
+
+- FR-12.1 — When a commitment reaches REFUNDED or VOID state, every member with an unclaimed deposit must be notified that they have a pending refund to claim.
+- FR-12.2 — The notification must include: the commitment name/fixture and the claimable amount. There is no deadline to communicate — claims are open indefinitely.
+- FR-12.3 — When a wallet is connected, the UI must prominently surface any open claims belonging to that wallet across all commitments — regardless of which page the user is on.
+- FR-12.4 — Unclaimed refunds must remain visible in the member's claim history until they are collected.
+- FR-12.5 — When a commitment resolves YES and funds are released to the beneficiary, the beneficiary must be notified that funds have arrived.
+- FR-12.6 — The beneficiary notification must include: the commitment name/fixture, the amount received, and a link to the settlement transaction on a Solana block explorer.
+
+> **Rationale:** The pull-based refund model (FR-7, NO path) requires members to take an explicit action to recover their funds. Unlike a push model where refunds arrive automatically, members who never return to the app would silently lose access to their money without any prompt. Notifications exist solely because the settlement model requires user action — they are a direct consequence of the pull design choice.
+
 ### FR-13: Keeper — Off-Chain Automation
 
 - FR-13.1 — The keeper must subscribe to TxLINE's SSE stream (`/api/scores/stream`) as its primary signal for `game_finalised` events.
-- FR-13.2 — The keeper must also poll `/api/fixtures/snapshot` at a regular interval (no greater than 60 seconds) as a fallback, independently of the SSE stream.
+- FR-13.2 — The keeper must also scan `/api/scores/updates/{epochDay}/{hour}/{interval}` at a regular interval (no greater than 60 seconds) as a fallback, independently of the SSE stream. On each scan, it checks recent intervals for records with `action=game_finalised` on tracked fixtures.
 - FR-13.3 — On detecting `game_finalised` via either channel, the keeper must fetch the stat-validation proof and submit the resolve transaction.
 - FR-13.4 — The keeper must detect SSE disconnection and log it. Polling must continue uninterrupted regardless of SSE state — the two channels operate in parallel, not in series.
 - FR-13.5 — If the keeper submits a resolve transaction that fails because the commitment is already resolved (idempotent state), it must treat this as a success and not retry.
@@ -159,19 +195,6 @@ Settlement uses a hybrid push/pull model to remain scalable regardless of DAO si
 
 > **Rationale:** Solana account data is not queryable like a database. Operations like "all commitments sorted by pledged amount" or "all open claims for wallet X" require iterating every account owned by the program — which is slow, expensive, and not feasible in a page load. The indexer makes the public board and claim notifications possible without compromising the trustless settlement model: it serves reads, the chain handles writes.
 
-### FR-9: Public Board
-
-- FR-9.1 — All commitments must be publicly visible to any visitor without a wallet connection.
-- FR-9.2 — Each commitment listing must display: condition (human-readable), beneficiary, total pledged amount, member count, and current status.
-- FR-9.3 — The board must be browsable before, during, and after a match.
-- FR-9.4 — The board should support filtering and sorting by: pledged amount, condition type, beneficiary, and group size.
-
-### FR-10: Live Settlement Feed
-
-- FR-10.1 — The system must surface resolution events in real time as they occur on-chain.
-- FR-10.2 — Each event in the feed must link to the settlement transaction on a Solana block explorer.
-- FR-10.3 — The feed must distinguish individual settlements from group (DAO) settlements.
-
 ### FR-15: In-Play Pledge Card
 
 - FR-15.1 — During a live match, the pledge card must display the current score in real time, updating without a page refresh.
@@ -182,25 +205,14 @@ Settlement uses a hybrid push/pull model to remain scalable regardless of DAO si
 
 > **Rationale:** Judging criterion #2 explicitly rewards a product that "responds to what's actively unfolding on the pitch." A pledge card that only changes at the final whistle fails this criterion outright — the product reads as a static escrow, not a live experience. The in-play card is what makes the stakes visible and emotionally connected to the match as it happens.
 
-### FR-12: Pending Claim Notifications
-
-- FR-12.1 — When a commitment reaches REFUNDED or VOID state, every member with an unclaimed deposit must be notified that they have a pending refund to claim.
-- FR-12.2 — The notification must include: the commitment name/fixture and the claimable amount. There is no deadline to communicate — claims are open indefinitely.
-- FR-12.3 — When a wallet is connected, the UI must prominently surface any open claims belonging to that wallet across all commitments — regardless of which page the user is on.
-- FR-12.4 — Unclaimed refunds must remain visible in the member's claim history until they are collected.
-- FR-12.5 — When a commitment resolves YES and funds are released to the beneficiary, the beneficiary must be notified that funds have arrived.
-- FR-12.6 — The beneficiary notification must include: the commitment name/fixture, the amount received, and a link to the settlement transaction on a Solana block explorer.
-
-> **Rationale:** The pull-based refund model (FR-7, NO path) requires members to take an explicit action to recover their funds. Unlike a push model where refunds arrive automatically, members who never return to the app would silently lose access to their money without any prompt. Notifications exist solely because the settlement model requires user action — they are a direct consequence of the pull design choice.
-
 ---
 
 ## Non-Functional Requirements
 
 | # | Requirement |
 |---|---|
-| NFR-1 | **Trustless** — no admin key, multisig, or committee may alter, block, or redirect fund flows at any point. |
-| NFR-2 | **Permissionless resolution** — the resolution path must remain live even if the original pledger is absent or unresponsive. |
+| NFR-1 | **Trustless (on-chain path)** — when `ESCROW_MODE=on-chain`, no admin key, multisig, or committee may alter, block, or redirect fund flows at any point. Resolution is driven entirely by the on-chain `validateStatV2` CPI; the keeper cannot override the outcome. When `ESCROW_MODE=keeper-custody`, resolution is automated and proof-gated but keeper-signed — the keeper evaluates the TxLINE proof off-chain and submits the outcome. Both modes must disclose the active path to the pledger at commitment creation time. |
+| NFR-2 | **Permissionless resolution** — when `ESCROW_MODE=on-chain`, any wallet may trigger resolution; no designated role is required. When `ESCROW_MODE=keeper-custody`, the keeper is the designated resolver but the resolution condition (TxLINE proof) remains publicly verifiable. In both modes, the resolution path must remain live even if the original pledger is absent or unresponsive. |
 | NFR-3 | **Transparency** — all commitments, membership, and settlements are on-chain and publicly inspectable at any time. |
 | NFR-4 | **No counter-party** — the protocol must not match pledgers against opposing bets. Beneficiaries are defined at creation, not determined by an opposing party. |
 | NFR-5 | **Devnet scope** — all hackathon operations use Solana devnet and devnet SOL. Mainnet deployment is out of scope. |
@@ -224,11 +236,11 @@ The following TxLINE capabilities are required by this protocol:
 
 ## Open Questions
 
-These must be resolved before condition template design can begin.
+All open questions resolved.
 
-| # | Question | Blocks |
+| # | Question | Resolution |
 |---|---|---|
-| OQ-1 | Which TxLINE stat keys correspond to match outcome (win/loss/draw), and do they account for extra time and penalty shootouts? A 90-minute draw that goes to penalties produces a winner not visible in the goals stat. The condition templates cannot expose "X wins" until this is clarified. | FR-2, condition template design |
+| OQ-1 | Which TxLINE stat keys correspond to match outcome (win/loss/draw), and do they account for extra time and penalty shootouts? | **Resolved.** Stat keys 1/2 = P1/P2 total goals, ET goals included, penalty shootout goals excluded (shootout goals are separate keys 6001/6002). "Team wins" ships as keys `[1,2]`, Subtract, GreaterThan 0. A draw settled by shootout does not satisfy this condition — disclosed in UI at selection. |
 
 ---
 
