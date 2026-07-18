@@ -12,7 +12,7 @@ Claude updates this at every phase boundary and after every autonomy-window deci
 | **Golden path status** | not started (TxLINE auth+data REAL ✅ via scripts/connect.mjs; product 0%) |
 | **Last push** | `5d702b4` · 2026-07-18 16:44 BST |
 | **Demo video** | not recorded — RECORD BY 2026-07-19 09:00 BST |
-| **Submission** | no draft — open Google form draft TODAY |
+| **Submission** | requirements FILLED in SUBMISSION.md from live listing (16:55 BST); portal = Superteam Earn Track 2 listing; 92 competitors |
 
 ## Compressed phase plan (48h playbook → 19h)
 
@@ -28,12 +28,12 @@ Claude updates this at every phase boundary and after every autonomy-window deci
 ## Now / Next / Done
 
 ### Now (in progress — one owner each)
-- [ ] STEP 1 (human): paste local-pool Google form link/questions + confirm deploy target (Claude waiting)
+- [ ] STEP 2 (human): read docs/ideas/idea-01.md — confirm golden path scope + wow moment
+- [ ] Claude: fixture invariant test (pledge escrow: `sum(pledges) − payouts == vault balance`, Decimal)
 
 ### Next (unblocked, ordered)
-- [ ] Fixture invariant test (pledge escrow: `sum(pledges) − payouts == vault balance`, Decimal)
-- [ ] Deploy smoke: hello-world on real host, reachable from phone
-- [ ] Spec lock burst (P2)
+- [ ] Spec lock burst (P2) — after STEP 2 answers
+- [ ] Deploy smoke — DEFERRED by human ("no vercel, decide later"); architecture stays static-friendly so GitHub Pages (existing repo push rights) is zero-login fallback. Decide by 2026-07-19 07:00 BST at latest.
 
 ### Done (newest first, with commit)
 - [x] Template promoted to root, CLAUDE.md merged, pushed (`5d702b4`, 16:44 BST)
@@ -50,4 +50,4 @@ Claude updates this at every phase boundary and after every autonomy-window deci
 
 ## Blocked / waiting on human
 
-- STEP 1 inputs: Google form link/questions · deploy target confirmation
+- STEP 2: golden-path scope + wow-moment confirmation (see chat)

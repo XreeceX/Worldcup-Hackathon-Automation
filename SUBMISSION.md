@@ -12,14 +12,22 @@ The submission is a deliverable with its own schedule, not a last-hour chore. La
 | G4 | **T+42** | Code freeze. Submission copy finalized. Push after EVERY edit from here on |
 | G5 | **T+46 (= 2h early)** | Final submission SUBMITTED. Never race the cutoff |
 
-## The package (fill from RUBRIC.md §4 — typical items)
+## The package — FILLED from the live Superteam Earn listing (pasted 2026-07-18 16:55 BST)
 
-- [ ] Project details / description (portal)
-- [ ] Dev platform(s) used — name the sponsor tools explicitly
-- [ ] Presentation / deck link (test in incognito)
-- [ ] Demo video link (test in incognito, check it's not private/unlisted-broken)
-- [ ] Repo link — pushed HEAD must match every claim made in the portal
-- [ ] Live/deployed URL (exercise end-to-end from a fresh browser first)
+**Portal:** Superteam Earn → "World Cup — Consumer and Fan Experiences by TxODDS" (Track 2, $16k pool: 10k/4k/2k). 92 submissions as of 16:55 BST Jul 18. Winner announcement Jul 29 15:00 UTC.
+**Deadlines:** London local pool **Sat 19 Jul 12:00 BST (submit 11:30)** · global portal Sat 19 Jul 23:59 UTC.
+
+Required items (verbatim from listing):
+- [ ] **Demo Video ≤5 min** (Loom/YouTube link): problem → live app walkthrough → how TxLINE powers the backend. *"Absolute requirement to pass initial screening."* Video is weighted heaviest — matches end before review, so the video IS the product.
+- [ ] **Application Access**: working link to deployed website OR functional API endpoint judges can test (devnet OK).
+- [ ] **Brief Technical Documentation**: core idea, business/technical highlights, **list of specific TxLINE endpoints used**.
+- [ ] **Feedback**: team's TxLINE API experience — liked most + friction points (log kept in RUBRIC.md §feedback as we build).
+- [ ] **Public repo link** — pushed HEAD must match every claim.
+
+Eligibility gates (hard):
+- Product must be **functional, not mockup** — decks/wireframes auto-disqualified.
+- **TxLINE data as a live input** + **sign up through Solana** (wallet sign-in).
+- Works during a match. Max 3 team members. Owned by real person on Superteam Earn.
 
 ## Final verification ritual (do ALL, in order, before G5)
 
