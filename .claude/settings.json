@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '=== HACKATHON STATUS BOARD (TODO.md) ===' && head -40 TODO.md 2>/dev/null; echo; echo '=== CURRENT GATE: check PLAYBOOK.md before starting work. Laws: push==done · real before mocked · scope frozen at spec lock ==='"
+          }
+        ]
+      }
+    ]
+  }
+}
