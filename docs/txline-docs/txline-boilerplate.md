@@ -179,9 +179,12 @@ GET /scores/stat-validation?fixtureId=&seq=&statKey=1
 | 7 / 8 | P1 / P2 corners |
 | 1001 / 1002 | P1 / P2 H1 goals |
 | 1007 / 1008 | P1 / P2 H1 corners |
-| 2001 / 2002 | P1 / P2 H2 goals |
-| 3001 / 3002 | P1 / P2 ET goals |
+| 2001 / 2002 | P1 / P2 HT goals (half-time snapshot) |
+| 3001 / 3002 | P1 / P2 H2 goals  ← NOT ET (see period-prefix formula below) |
+| 4001 / 4002 | P1 / P2 ET1 goals |
+| 5001 / 5002 | P1 / P2 ET2 goals |
 | 6001 / 6002 | P1 / P2 penalty shootout goals |
+| 7001 / 7002 | P1 / P2 ET-total goals |
 
 ---
 
@@ -439,7 +442,7 @@ const [tenDailyFixturesRootsPda] = PublicKey.findProgramAddressSync(
 const shiftDivisor = 281474976710656; // 2^48
 const pureFixtureId = packedId % shiftDivisor;
 const gameState = Math.floor(packedId / shiftDivisor);
-// gameState === 6 → fixture cancelled
+// gameState === 16 → fixture cancelled (6 = WaitET — do NOT use for void)
 
 // 5. Simulate
 await program.methods
@@ -452,6 +455,8 @@ await program.methods
 ---
 
 ## Common gotchas
+
+> **Period-prefix formula:** key = prefix + base. Prefixes: 0=total, 1000=H1, 2000=HT, 3000=H2, 4000=ET1, 5000=ET2, 6000=shootout, 7000=ET-total. Bases: 1/2=goals, 3/4=yellows, 5/6=reds, 7/8=corners.
 
 | Trap | Fix |
 |---|---|
