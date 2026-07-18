@@ -1,0 +1,39 @@
+{
+  "date": "2026-07-18",
+  "slug": "research-sweep",
+  "task_class": "research",
+  "goal": "Pre-spec-lock research: competitor scan + adversarial masterplan for idea-01, sol plan-critic, Fable 5 validator",
+  "bar": "4 acceptance criteria (products>=8 sourced, masterplan complete, validator verdict, artifacts pushed)",
+  "outcome": "DONE",
+  "cost": {
+    "est_tokens_budget": 150000,
+    "est_tokens_spent": 110000,
+    "wall_clock_min": 28,
+    "spawns": 4,
+    "interruptions": 2
+  },
+  "quality": {
+    "criteria_met": 4,
+    "criteria_total": 4,
+    "first_pass_yield": 0.75,
+    "redteam_findings": 3,
+    "verifier_reversals": 2,
+    "rework_7d": null
+  },
+  "diag": {
+    "notes": "Both Sonnet researchers idled at spawn without executing — needed SendMessage nudge (known wrapper-idle mode). Sol via codex exec worked first try, stderr junk accidentally committed then removed. Validator caught 2 unsupported stats (Polymarket flat 0.75%, GoFundMe 2.9%) and 1 off-by-one citation.",
+    "escalations": 0,
+    "misroutes": 0
+  },
+  "key_deliverables": [
+    "docs/research/sol-critique.md",
+    "docs/research/competitor-scan.md",
+    "docs/research/hook-stats.md",
+    "docs/research/masterplan.md (with Fable validation verdict)"
+  ],
+  "strategy_changes": [
+    "Track 1 dual submission killed (RUBRIC.md:29 rule)",
+    "Kill list locked: DAO, condition language, USDC, odds, social surface",
+    "Anchor toolchain installed mid-run (solana 3.1.10, anchor 1.1.2)"
+  ]
+}
