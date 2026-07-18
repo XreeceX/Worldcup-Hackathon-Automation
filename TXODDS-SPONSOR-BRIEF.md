@@ -76,6 +76,16 @@ On-chain program: Anchor `txoracle` v1.5.6, Token-2022 for the TxL mint. 17 inst
 
 **Rule #1 of the whole API: never mix rows.** RPC, program ID, mint, guest JWT host, and activation host must all come from one column. Devnet tx activated on the mainnet host fails with `504`.
 
+### Project wallet (devnet)
+
+| | |
+|---|---|
+| Address (public) | `2ZEiuuvqSFiZY4FEjBAhTutyqhEC7ajJruHPfzq4Eq68` |
+| Keypair | `_keys/wallet.json` — **gitignored, never commit**; each teammate needs their own local copy to run scripts |
+| Funded | ~5.5 devnet SOL (Jul 18) |
+| TxLINE subscription | free tier level 1, subscribe tx `5xAFpe5LDU2ckV4FSM13kfq2KJNQsDyiBQ2e4vZifVhDE8PDuAPrG63xrQBLJaKgwUStnrv1vdwrmS46gTXTxtJF` |
+| API session | `_keys/txline-session.json` (gitignored) — created/reused by `scripts/connect.mjs` |
+
 ## 4. Access flow (free tier, ~15 lines of real code)
 
 Deps: `npm install @coral-xyz/anchor @solana/web3.js @solana/spl-token axios tweetnacl`. Node **20+** required by example scripts (SSE client dep).
