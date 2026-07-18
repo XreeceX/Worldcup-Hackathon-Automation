@@ -28,12 +28,16 @@ Claude updates this at every phase boundary and after every autonomy-window deci
 ## Now / Next / Done
 
 ### Now (in progress — one owner each)
-- [ ] STEP 2 (human): read docs/ideas/idea-01.md — confirm golden path scope + wow moment
-- [ ] Claude: fixture invariant test (pledge escrow: `sum(pledges) − payouts == vault balance`, Decimal)
+- [ ] spec-writer agent (Fable, fresh ctx): writing docs/specs/01–08 per SPECS.md skeletons + locked decisions (launched 17:30 BST)
+- [ ] Anchor smoke test: `anchor init program && anchor build` background task b4i663dxa (verdict gate 18:00 BST: green → Path A program; red → Path B keeper-custody)
 
 ### Next (unblocked, ordered)
-- [ ] Spec lock burst (P2) — after STEP 2 answers
-- [ ] Deploy smoke — DEFERRED by human ("no vercel, decide later"); architecture stays static-friendly so GitHub Pages (existing repo push rights) is zero-login fallback. Decide by 2026-07-19 07:00 BST at latest.
+- [ ] Review + commit specs → SCOPE FROZEN
+- [ ] Walking skeleton: keeper loop first (extend scripts/connect.mjs), then create-pledge flow
+- [ ] Deploy: static frontend (GitHub Pages) + backend host — cloudflared quick tunnel = zero-login fallback; decide at skeleton deploy (by 23:00 BST)
+
+### Locks (STEP 2, human confirmed 17:28 BST "lock all")
+- Golden path = individual pledge loop. Wow moment = whistle → auto transfer + explorer link. DAO killed. Anchor = smoke-test-then-fallback. Track 1 submission killed (rule RUBRIC.md:29). Local £5k form: DONE by human.
 
 ### Done (newest first, with commit)
 - [x] Template promoted to root, CLAUDE.md merged, pushed (`5d702b4`, 16:44 BST)
