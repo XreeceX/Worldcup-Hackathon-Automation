@@ -1,0 +1,22 @@
+{
+  "_note": "Seeded replay fixture for the demo (spec 02 B2/B3). fixtureId, home/away and kickoffUtc are real values pulled live from TxLINE devnet's /api/fixtures/snapshot on 2026-07-18 (Australia vs Brazil, Participant1IsHome=true). TxLINE's free devnet tier only exposes upcoming/scheduled friendlies during this build window — no fixture has live goal events yet — so the score/match-event timeline below is authored for demo pacing, not a captured live payload. Every emission is tagged source:\"replay\" (per 02 §1) so the keeper cannot distinguish it from the live feed, and the terminal game_finalised event still drives a REAL devnet escrow release.",
+  "fixture": {
+    "fixtureId": 18182808,
+    "home": "Australia",
+    "away": "Brazil",
+    "kickoffUtc": "2026-07-20T05:00:00.000Z"
+  },
+  "timeline": [
+    { "atMs": 0,     "event": "match_event",    "payload": { "fixtureId": 18182808, "type": "kickoff", "minute": 0 } },
+    { "atMs": 2000,  "event": "score",          "payload": { "fixtureId": 18182808, "homeGoals": 0, "awayGoals": 0, "minute": 1 } },
+    { "atMs": 5000,  "event": "match_event",    "payload": { "fixtureId": 18182808, "type": "goal", "team": "home", "minute": 23, "detail": "Goal — Australia" } },
+    { "atMs": 5200,  "event": "score",          "payload": { "fixtureId": 18182808, "homeGoals": 1, "awayGoals": 0, "minute": 23 } },
+    { "atMs": 9000,  "event": "match_event",    "payload": { "fixtureId": 18182808, "type": "goal", "team": "away", "minute": 41, "detail": "Goal — Brazil" } },
+    { "atMs": 9200,  "event": "score",          "payload": { "fixtureId": 18182808, "homeGoals": 1, "awayGoals": 1, "minute": 41 } },
+    { "atMs": 11000, "event": "match_event",    "payload": { "fixtureId": 18182808, "type": "half_time", "minute": 45 } },
+    { "atMs": 14000, "event": "match_event",    "payload": { "fixtureId": 18182808, "type": "goal", "team": "home", "minute": 67, "detail": "Goal — Australia" } },
+    { "atMs": 14200, "event": "score",          "payload": { "fixtureId": 18182808, "homeGoals": 2, "awayGoals": 1, "minute": 67 } },
+    { "atMs": 18000, "event": "match_event",    "payload": { "fixtureId": 18182808, "type": "full_time", "minute": 90 } },
+    { "atMs": 18200, "event": "game_finalised", "payload": { "fixtureId": 18182808, "homeGoals": 2, "awayGoals": 1 } }
+  ]
+}
