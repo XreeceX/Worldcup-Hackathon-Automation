@@ -249,11 +249,13 @@ name:               [u8; 64]
 
 **Logic:**
 1. Check `commitment.status == Open`. Reject with `NotOpen`.
-2. CPI `validateFixture(...)` against TxLINE program — verify `gameState == 6` (cancelled). Reject with `FixtureNotCancelled` if not.
+2. CPI `validateFixture(...)` against TxLINE program — verify `gameState == 16` (cancelled). Reject with `FixtureNotCancelled` if not.
 3. Set `commitment.status = Void`.
 4. Emit `CommitmentVoided { commitment, reason: FixtureCancelled }`.
 
 **Errors:** `NotOpen`, `FixtureNotCancelled`
+
+> **gameState reference (from TxLINE soccer feed docs):** 1=NS · 2=H1 · 3=HT · 4=H2 · 5=Ended · 6=WaitET · 7=ET1 · 8=HTET · 9=ET2 · 10=FET · 11=WaitPens · 12=Shootout · 13=FPE · 14=Interrupted · 15=Abandoned · **16=Cancelled** · 19=Postponed. Only `gameState==16` is the correct cancellation signal. `gameState==6` is WaitET — a knockout match waiting to start extra time — and must never trigger void.
 
 ---
 
@@ -463,6 +465,8 @@ The keeper filters the TxLINE score stream to the requested fixture and forwards
 | TotalGoals ≥ N | — | descoped; see Section 5 |
 | In-play display (goals + cards) | `1,2,5,6` | display only via score proxy; no CPI |
 | Void verification | — | `/fixtures/validation` |
+
+> **Stat key period-prefix formula (authoritative):** key = period_prefix + base. Bases: 1/2=goals, 3/4=yellows, 5/6=reds, 7/8=corners. Prefixes: 0=total, 1000=H1, 2000=HT, 3000=H2, 4000=ET1, 5000=ET2, 6000=shootout, 7000=ET-total. Examples: `1001/1002`=H1 goals, `3001/3002`=H2 goals (not ET — the boilerplate `txline-boilerplate.md` labels `3001` as "ET goals" which is wrong), `4001/4002`=ET1 goals, `6001/6002`=shootout goals. Keys `[1,2]` are cumulative total goals at `game_finalised` — correct for both BTTS and TeamWins templates.
 
 ---
 
@@ -1147,4 +1151,4 @@ All four bugs in `build-bugs.md` must be fixed before any keeper test:
 | Q3 | Beneficiary registry — curated or open addresses? | **Resolved.** Open addresses for hackathon. UI shows unverified-address warning at creation (Step 2 of create flow). Curated registry is a post-hackathon feature. |
 | Q4 | Minimum deposit for group join? | **Resolved.** 0.01 SOL minimum enforced in both `create_commitment` and `join` instructions. Raises cost of sybil inflation without materially deterring genuine fans. |
 | Q5 | Which `ESCROW_MODE` for the hackathon? | **Resolved — on-chain only.** Anchor program holds funds in a vault PDA; the keeper submits transactions but never holds funds. `keeper-custody` mode is not implemented. `KeeperEscrow` class in the frontend interface is a stub; only `AnchorEscrow` is wired up. |
-| Q6 | Replay fixture ID for demo? | **Deferred — not a blocker for building.** Required before keeper integration testing. Must be a completed World Cup fixture with a confirmed `game_finalised` record (`statusId=100`) and a condition that is clearly met (e.g. a match where both teams scored, or a team won on goals). |
+| Q6 | Replay fixture ID for demo? | **Resolved.** Use `18241006` England vs Argentina (Jul 15) for deterministic replay — confirmed replayable via `/scores/historical/`. For the live wow moment, `18257865` France vs England (3rd place, Jul 18 21:00 UTC) is live during the build window — run the keeper live against this match for the demo video. Both teams scored in the England–Argentina semi (BTTS condition clearly met). Verify the `game_finalised` `seq` against `/scores/historical/18241006` before building the keeper integration test. |
