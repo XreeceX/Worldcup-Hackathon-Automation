@@ -58,5 +58,6 @@ These rules bind every Claude Code session in this repo for the duration of the 
 - Project devnet wallet: `2ZEiuuvqSFiZY4FEjBAhTutyqhEC7ajJruHPfzq4Eq68` (keypair `_keys/wallet.json`, gitignored). Funded ~5.5 SOL devnet.
 - TxLINE connection verified working: `export PATH="/opt/homebrew/bin:$PATH"; node scripts/connect.mjs` (session cache `_keys/txline-session.json`).
 - Sponsor/event brief: `TXODDS-SPONSOR-BRIEF.md`. Track docs: `docs/tracks/`, idea: `docs/ideas/idea-01.md`.
+- **Verbatim track briefs live in `archieve/tracks/track-0{1,2,3}.md`** (submission requirements, judging criteria, eligibility, constraints — the source RUBRIC.md was distilled from). Binding constraint from briefs: TxLINE credit token is locked to their program — NO P2P transfers/staking of it; user funds use USDC/SOL in our own escrow. Alt idea archive: `archieve/ideas/idea-03.md` (Fan Passport).
 - Work happens on branch `dev-supa`; PRs target `master`.
 - `hackathon-template/` is the template's own nested repo (remote `supawichza40/hackathon-template`) — its playbook files now live at repo root; use the root copies. Run the `retro` ritual against the nested repo after the event.
