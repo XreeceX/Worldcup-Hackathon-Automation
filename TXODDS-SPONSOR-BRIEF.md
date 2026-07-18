@@ -17,15 +17,15 @@ Everything useful mined from the sponsor org (`github.com/txodds`), 2026-07-18. 
 - Free premium data access ends Jul 19 23:59 UTC.
 
 **Tracks (enter multiple, win max ONE prize):**
-| Track | Total | 1st / 2nd / 3rd |
-|---|---|---|
-| **Trading Tools and Agents** (our brief) | 16k USDT | 10,000 / 4,000 / 2,000 |
-| Consumer and Fan Experiences | 16k USDT | — |
-| Prediction Markets and Settlement | 18k USDT | — |
+| Track | Total | 1st / 2nd / 3rd | Subs (Jul 18 pm) |
+|---|---|---|---|
+| **Consumer and Fan Experiences — PRIMARY** (idea-01, see `docs/tracks/track-02-consumer-fan.md`) | 16k USDT | 10,000 / 4,000 / 2,000 | ~90 |
+| **Prediction Markets and Settlement — SECONDARY** (same engine, infra framing) | 18k USDT | 12,000 / 4,000 / 2,000 | ~96 |
+| Trading Tools and Agents | 16k USDT | 10,000 / 4,000 / 2,000 | ~78 |
 
-~78 submissions on Trading track as of Jul 18.
+Consumer-track extra requirement: **sign up through Solana** (wallet sign-in) + product must work during a match. Judging: fan UX, real-time responsiveness, originality, monetization path, completeness — demo video heaviest.
 
-**Trading track judging criteria (verbatim themes):**
+**Trading track judging criteria (REFERENCE ONLY — we're on Consumer track now):**
 1. **Core functionality & data ingestion** — runs and executes decisions on live or simulated TxLINE feeds.
 2. **Autonomous operation** — zero manual input once deployed.
 3. **Logic & code architecture** — clean, deterministic, well-documented, mathematically/strategically defensible.
@@ -186,9 +186,9 @@ yarn ts-node examples/devnet/scripts/subscription_free_tier.ts
 9. Empty SSE stream usually means no covered fixture live right now — check the schedule, not your auth.
 10. TxL purchases (paid tiers only) may trigger KYC — irrelevant for free World Cup tier.
 
-## 12. Project angles (aligned to Trading track judging)
+## 12. Project angles (HISTORICAL — decision made: idea-01 Social Commitment Engine on Consumer track, see `docs/ideas/idea-01.md`)
 
-Judging wants: autonomous agent, live TxLINE input, deterministic defensible logic, production readiness, demo video. Angles ranked by fit:
+Original Trading-track analysis kept for reference:
 
 - **Sharp Movement Detector++** (sponsor's own idea #1, de-risked): agent polls/streams StablePrice odds, flags significant shifts, logs signals, **tracks its own hit rate against `game_finalised` outcomes** — and anchors every logged signal via on-chain proof (`validateStatV2` .view()) so the track record is tamper-evident. Autonomous + deterministic + uses the oracle's unique feature.
 - **Agent vs Agent Arena** (sponsor idea #2): two agents, same feed, opposite strategies, positions settled on-chain via score proofs. Highest wow, more moving parts.
