@@ -3,3 +3,8 @@ node_modules/
 .env.*
 !.env.example
 _keys/
+tifo/target/
+tifo/.anchor/
+web/.next/
+*.log
+nohup.out

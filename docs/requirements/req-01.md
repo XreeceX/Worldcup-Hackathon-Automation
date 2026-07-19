@@ -23,7 +23,7 @@ The Social Commitment Engine is an on-chain protocol that lets fans and fan comm
 
 **Commitment** — a conditional escrow tied to a specific match outcome. Can be individual (one pledger) or group (multiple members). Both are the same underlying structure. Each commitment stores the fixture's kickoff timestamp at creation time, used to enforce the membership cutoff without a discrete lock transaction.
 
-**Condition** — a stat-based predicate over a specific fixture. Composed from TxLINE stat keys at creation time, then immutable. Examples: "Brazil scores more than 2 goals", "no red cards in the match", "both teams score AND total goals under 5".
+**Condition** — a stat-based predicate over a specific fixture. Composed from TxLINE stat keys at creation time, then immutable. Shipped examples: "Both teams score", "Brazil wins". The template mapping is the only extension point for new conditions.
 
 **Vault** — the escrow holding committed funds. Held by the protocol until resolution or void.
 
@@ -50,8 +50,8 @@ The Social Commitment Engine is an on-chain protocol that lets fans and fan comm
 - FR-2.1 — Conditions must be selected from a fixed set of templates presented in human-readable form. There is no free-form condition composer.
 - FR-2.2 — The initial template set is:
   - **Both teams score** — home goals > 0 AND away goals > 0
-  - **Total goals ≥ N** — total goals at full time ≥ a pledger-specified integer N
   - **Team wins** — the selected team has more goals than the opponent at full time, including extra time. A match settled by penalty shootout after a draw does not satisfy this condition. The UI must disclose this limitation at condition selection time.
+  - **Total goals ≥ N** — total goals at full time ≥ a pledger-specified integer N (1–20). *Reinstated 2026-07-19: the earlier descope was based on incomplete boilerplate docs — the on-chain `BinaryExpression` enum includes `Add`, verified against a real devnet proof (total≥3=true / total≥4=false on fixture 18241006).*
 - FR-2.3 — The template set is designed to be expandable. Adding a new template must not require changes to the resolution or proof pipeline — only a new `validateStatV2` payload mapping.
 - FR-2.4 — Conditions must be immutable once the commitment is created. There is no edit window before kickoff.
 
@@ -63,14 +63,14 @@ The Social Commitment Engine is an on-chain protocol that lets fans and fan comm
 - FR-3.2 — Joining a group constitutes co-signing its condition and beneficiary — no separate approval or vote is required.
 - FR-3.3 — No new members may join at or after the kickoff timestamp. This is enforced at the join instruction by comparing the on-chain clock against the stored kickoff timestamp — no discrete lock transaction is required.
 - FR-3.4 — A member's deposit amount must be recorded at join time and used to calculate their pro-rata share at claim time.
-- FR-3.5 — A group commitment may have a maximum of 500 members. The `join` instruction must reject with a clear error once this cap is reached. Account space for the maximum member list must be pre-allocated at commitment creation.
+- FR-3.5 — A group commitment may have a maximum of 200 members. The `join` instruction must reject with a clear error once this cap is reached. Account space for the maximum member list must be pre-allocated at commitment creation. *(Revised from 500 on 2026-07-19: Solana caps CPI-created account allocations at 10,240 bytes; 200 members fits in one atomic `create` instruction. Larger caps require an incremental realloc flow — post-hackathon.)*
 
 - FR-3.6 — Any member, including the DAO Founder, may withdraw their full deposit before the kickoff timestamp. Withdrawal is enforced by the same on-chain clock check as `join`.
 - FR-3.7 — Withdrawal removes the member from the commitment entirely. Partial withdrawal is not permitted — a member withdraws their full deposit or nothing.
 - FR-3.8 — A member who has withdrawn may not rejoin the same commitment.
 - FR-3.9 — If the last member withdraws, the commitment must be automatically closed. No further instructions (join, resolve, void) may be called on a closed commitment.
 
-> **Rationale (FR-3.5):** The pull-based refund model (FR-7) eliminates the settlement compute problem, so the cap is not about atomicity. It exists to prevent spam (one entity flooding a DAO with dust-deposit wallets inflating member count) and to make account size predictable and pre-allocatable. 500 was chosen as generous enough for any realistic fan community while keeping the pre-allocated account footprint bounded at ~20KB.
+> **Rationale (FR-3.5):** The pull-based refund model (FR-7) eliminates the settlement compute problem, so the cap is not about atomicity. It exists to prevent spam (one entity flooding a DAO with dust-deposit wallets inflating member count) and to make account size predictable and pre-allocatable. 200 keeps the pre-allocated account within Solana's 10,240-byte single-instruction allocation limit (~9.8KB) while remaining generous for a realistic fan community.
 >
 > **Rationale (FR-3.6–3.9):** "Join = commit" is the social framing, but withholding the right to change one's mind before the game starts would deter participation. Withdrawal is scoped strictly to before kickoff — the same boundary enforced by lazy locking — so it cannot be used to escape a commitment once the match is underway. Allowing the founder to withdraw like any other member keeps the rules uniform; if they are the last member, closing the commitment avoids a permanently empty vault with no resolution path.
 
@@ -105,7 +105,7 @@ No state may be skipped or reversed. There is no discrete LOCKED state — the k
 
 ### FR-6: Resolution
 
-> The following requirements apply fully when `ESCROW_MODE=on-chain`. In `ESCROW_MODE=keeper-custody`, FR-6.1 and FR-6.3 are satisfied by the keeper acting on a publicly verifiable TxLINE proof — see NFR-1.
+> The hackathon build ships `ESCROW_MODE=on-chain` only (see design doc Q5). The keeper-custody clauses below and in NFR-1/NFR-2 are retained as the documented fallback contract but are not implemented.
 
 - FR-6.1 — Resolution must be permissionless — any wallet may trigger it; no designated role required.
 - FR-6.2 — Resolution must only be possible after TxLINE confirms the match as finalised.

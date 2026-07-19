@@ -86,7 +86,7 @@ pub struct Commitment {
     pub name:               [u8; 64],   // UTF-8 label, null-padded (e.g. "Argentina DAO")
     pub status:             CommitmentStatus,
     pub member_count:       u32,
-    pub members:            [MemberEntry; 500],  // pre-allocated; empty slots have wallet = zero
+    pub members:            [MemberEntry; 200],  // pre-allocated; empty slots have wallet = zero (cap set by 10,240-byte CPI allocation limit)
     pub vault_bump:         u8,
     pub bump:               u8,
 }
@@ -113,8 +113,8 @@ pub enum CommitmentStatus {
 
 **Account size estimate:**
 - Fixed fields: ~200 bytes (including `name` array)
-- 500 × MemberEntry (32 + 8 + 1 + 1 = 42 bytes): 21,000 bytes
-- Total: ~21,200 bytes → approximately 0.15 SOL rent reserve
+- 200 × MemberEntry (zero-copy: 32 + 8 + 1 + 1 + 6 pad = 48 bytes): 9,600 bytes
+- Total: 9,768 bytes (within the 10,240-byte CPI allocation cap) → approximately 0.069 SOL rent reserve
 
 **PDA seeds:** `["commitment", fixture_id as LE u64, founder_pubkey]`
 
@@ -153,7 +153,7 @@ name:               [u8; 64]
 2. If `condition_template == 1` (TeamWins), validate `condition_param` ∈ {0, 1}. Reject with `ConditionParamInvalid` otherwise.
 3. Validate `kickoff_ts > Clock::get().unix_timestamp`. Reject with `KickoffInPast`.
 4. Validate `deposit_lamports >= 10_000_000` (0.01 SOL). Reject with `DepositTooSmall`.
-5. Allocate Commitment PDA with space for 500 MemberEntries. Initialize all slots to zero.
+5. Allocate Commitment PDA with space for 200 MemberEntries. Initialize all slots to zero.
 6. Record founder as `members[0]` with `deposit_lamports`; set `member_count = 1`.
 7. Transfer `deposit_lamports` from founder to vault via system program.
 8. Emit `CommitmentCreated { commitment, fixture_id, condition_template, condition_param, beneficiary, deposit_lamports, name }`.
@@ -171,7 +171,7 @@ name:               [u8; 64]
 **Logic:**
 1. Check `commitment.status == Open`. Reject with `NotOpen`.
 2. Check `Clock::get().unix_timestamp < commitment.kickoff_ts`. Reject with `KickoffPassed`.
-3. Check `commitment.member_count < 500`. Reject with `MemberLimitReached`.
+3. Check `commitment.member_count < 200`. Reject with `MemberLimitReached`.
 4. Check signer is not already in `members` with `withdrawn == false`. Reject with `AlreadyMember`. (A wallet that previously withdrew may not rejoin — `withdrawn == true` is also rejected.)
 5. Validate `deposit_lamports >= 10_000_000`. Reject with `DepositTooSmall`.
 6. Find first empty slot (`wallet == Pubkey::default()`); write member entry; increment `member_count`.
@@ -255,7 +255,7 @@ name:               [u8; 64]
 
 **Errors:** `NotOpen`, `FixtureNotCancelled`
 
-> **gameState reference (from TxLINE soccer feed docs):** 1=NS · 2=H1 · 3=HT · 4=H2 · 5=Ended · 6=WaitET · 7=ET1 · 8=HTET · 9=ET2 · 10=FET · 11=WaitPens · 12=Shootout · 13=FPE · 14=Interrupted · 15=Abandoned · **16=Cancelled** · 19=Postponed. Only `gameState==16` is the correct cancellation signal. `gameState==6` is WaitET — a knockout match waiting to start extra time — and must never trigger void.
+> **gameState reference (from TxLINE soccer feed docs):** 1=NS · 2=H1 · 3=HT · 4=H2 · 5=Ended · 6=WaitET · 7=ET1 · 8=HTET · 9=ET2 · 10=FET · 11=WaitPens · 12=Shootout · 13=FPE · 14=Interrupted · 15=Abandoned · **16=Cancelled** · 19=Postponed. Only `gameState==16` is the correct cancellation signal. `gameState==6` is WaitET — a knockout match waiting to start extra time — and must never trigger void. A match that is Interrupted (14), Abandoned (15), or Postponed (19) and never transitions to 16 nor emits `game_finalised` is covered by the 7-day `void_timeout` path — no dedicated handling is needed for those states.
 
 ---
 
@@ -286,7 +286,7 @@ OPEN
  ├─ resolve (condition not met) ──► REFUNDED    no fund movement; members claim via claim_refund
  │                                      └─ last claimer → vault PDA closed, rent to claimer
  │
- ├─ void_fixture (gameState=6) ───► VOID        members claim via claim_refund (same path as REFUNDED)
+ ├─ void_fixture (gameState=16) ──► VOID        members claim via claim_refund (same path as REFUNDED)
  │
  ├─ void_timeout (7d+ elapsed) ───► VOID        same
  │
@@ -347,19 +347,27 @@ const strategyHomeWin: NDimensionalStrategy = {
 
 **Strategy (away wins, `condition_param == 1`):** swap `indexA` and `indexB`.
 
-### ~~Template: Total Goals ≥ N~~ — Descoped
+### Template 2: Total Goals ≥ N — Reinstated
 
-**Decision:** Removed from hackathon build. BTTS and TeamWins ship only.
+*(Previously descoped on the claim that `validateStatV2` cannot express addition. That was wrong — the boilerplate only documented `{ subtract: {} }`, but the on-chain `BinaryExpression` enum is `{ Add, Subtract }`. Verified 2026-07-19 against the real devnet proof for fixture 18241006 (3 total goals): Add/threshold 2/GreaterThan → `true`, Add/threshold 3/GreaterThan → `false`.)*
 
-**Rationale:** `validateStatV2` supports two predicate forms: `single` (one stat vs. threshold) and `binary` (subtract two stats, one threshold). Neither expresses addition. "Total goals ≥ N" requires `stat[0] + stat[1] ≥ N`, which cannot be expressed as a single predicate in either form.
+| Field | Value |
+|---|---|
+| `condition_template` | `2` |
+| `condition_param` | `N` (valid range 1–20, enforced at create) |
+| Human label | "N or more goals in the match" |
+| Stat keys | `[1, 2]` (P1 + P2 total goals) |
 
-Three workarounds were considered and rejected:
-
-1. **Enumerate valid (P1, P2) splits off-chain; submit whichever satisfies N.** Breaks the on-chain proof guarantee — the resolver chooses which split to submit, introducing an off-chain trust dependency. Violates FR-6.3.
-2. **Conservative predicate pair** (`P1 ≥ ⌈N/2⌉ AND P2 ≥ ⌊N/2⌋`). Strictly tighter than the real condition — a 3–0 scoreline satisfies "total ≥ 3" but fails this predicate. Pledgers would see a condition that the contract cannot fully verify.
-3. **`validateStatV3` multiproof.** Architecturally correct but requires a new endpoint, new IDL type, and more proof-construction surface — invisible in a demo video and high build cost relative to payoff.
-
-BTTS and TeamWins cover the two most common fan pledges. The template slot (`condition_template == 1`) is now occupied by TeamWins, not TotalGoals. Total Goals ≥ N can be added post-hackathon as template slot 2 using V3.
+**Strategy (total ≥ N):**
+```typescript
+const strategyTotalGoals = (n: number): NDimensionalStrategy => ({
+  geometricTargets: [],
+  distancePredicate: null,
+  discretePredicates: [{
+    binary: { indexA: 0, indexB: 1, op: { add: {} }, predicate: { threshold: n - 1, comparison: { greaterThan: {} } } }
+  }],
+});
+```
 
 ### `buildStrategy` reference
 
@@ -414,7 +422,7 @@ For void detection, the keeper polls:
 ```
 GET /api/fixtures/updates/{epochDay}/{hourOfDay}
 ```
-on the same 30-second poll cycle as score updates. If a tracked fixture appears with `gameState=6`, the keeper fetches the `validateFixture` proof and submits `void_fixture`.
+on the same 30-second poll cycle as score updates. If a tracked fixture appears with `gameState=16` (Cancelled), the keeper fetches the `validateFixture` proof and submits `void_fixture`.
 
 ### 6.3 Proof construction for `resolve`
 
@@ -436,13 +444,13 @@ on the same 30-second poll cycle as score updates. If a tracked fixture appears 
 ### 6.4 Proof construction for `void_fixture`
 
 ```
-1. Keeper detects gameState=6 on /fixtures/updates poll
+1. Keeper detects gameState=16 (Cancelled) on /fixtures/updates poll
 2. GET /fixtures/validation?fixtureId=&timestamp={fixture.Ts}
 3. Derive tenDailyFixturesRootsPda:
      windowStartDay = Math.floor(epochDay / 10) * 10
      PDA seeds: ["ten_daily_fixtures_roots", windowStartDay as LE u16]
 4. Decode packed fixtureId: gameState = Math.floor(packedId / 2^48)
-5. Confirm gameState === 6 before submitting
+5. Confirm gameState === 16 before submitting
 6. Submit void_fixture instruction
 ```
 
@@ -584,7 +592,7 @@ async function pollFixtures() {
   for (const f of updates.data) {
     const gameState = Math.floor(f.FixtureId / 281474976710656);
     const pureFixtureId = f.FixtureId % 281474976710656;
-    if (gameState === 6) {
+    if (gameState === 16) {   // 16 = Cancelled; 6 = WaitET and must never trigger void
       await handleFixtureCancelled(pureFixtureId, f.Ts);
     }
   }
@@ -862,7 +870,7 @@ const escrow: EscrowInterface = new AnchorEscrow(program, wallet);
 | Transaction rejected by wallet | Toast: "Transaction cancelled." No state change. |
 | Transaction fails on-chain | Toast: "Transaction failed — [reason from program error]." Log the error. |
 | `KickoffPassed` from join | Join button hidden client-side; server-side guard is the canonical check. |
-| `MemberLimitReached` | Toast: "This DAO has reached its 500-member limit." |
+| `MemberLimitReached` | Toast: "This DAO has reached its 200-member limit." |
 | `DepositTooSmall` | Input validation before submission: "Minimum deposit is 0.01 SOL." |
 | `AlreadyClaimed` | Claim button hidden for already-claimed members. |
 | Indexer unavailable | Board shows stale data with a banner: "Data may be delayed." On-chain state unaffected. |
@@ -954,9 +962,9 @@ If they were the last member:
 ### 10.5 Void — fixture cancellation
 
 ```
-Fixture is cancelled (TxLINE sets gameState=6 in fixtures/updates)
+Fixture is cancelled (TxLINE sets gameState=16 in fixtures/updates)
 
-Keeper fixture poll detects gameState=6
+Keeper fixture poll detects gameState=16
   → fetchFixtureValidationProof(fixtureId, timestamp)
   → sendVoidFixtureTransaction(commitment, proof) for each Open commitment on that fixture
   → status = Void
@@ -1108,7 +1116,7 @@ Start only once Phase 1 is end-to-end green.
 
 ### Phase 3 — Polish (if time permits)
 
-8. `void_fixture` instruction + keeper auto-void detection on gameState=6
+8. `void_fixture` instruction + keeper auto-void detection on gameState=16
 9. `void_timeout` instruction + VoidButton in UI
 10. Live settlement feed (SSE-backed, real-time)
 11. ClaimsBadge pending-claim notifications
@@ -1151,4 +1159,4 @@ All four bugs in `build-bugs.md` must be fixed before any keeper test:
 | Q3 | Beneficiary registry — curated or open addresses? | **Resolved.** Open addresses for hackathon. UI shows unverified-address warning at creation (Step 2 of create flow). Curated registry is a post-hackathon feature. |
 | Q4 | Minimum deposit for group join? | **Resolved.** 0.01 SOL minimum enforced in both `create_commitment` and `join` instructions. Raises cost of sybil inflation without materially deterring genuine fans. |
 | Q5 | Which `ESCROW_MODE` for the hackathon? | **Resolved — on-chain only.** Anchor program holds funds in a vault PDA; the keeper submits transactions but never holds funds. `keeper-custody` mode is not implemented. `KeeperEscrow` class in the frontend interface is a stub; only `AnchorEscrow` is wired up. |
-| Q6 | Replay fixture ID for demo? | **Resolved.** Use `18241006` England vs Argentina (Jul 15) for deterministic replay — confirmed replayable via `/scores/historical/`. For the live wow moment, `18257865` France vs England (3rd place, Jul 18 21:00 UTC) is live during the build window — run the keeper live against this match for the demo video. Both teams scored in the England–Argentina semi (BTTS condition clearly met). Verify the `game_finalised` `seq` against `/scores/historical/18241006` before building the keeper integration test. |
+| Q6 | Replay fixture ID for demo? | **Resolved — replay-only.** Use `18241006` England vs Argentina (Jul 15) for deterministic replay — confirmed replayable via `/scores/historical/`. Both teams scored in that semi (BTTS condition clearly met). Live capture of `18257865` (France vs England 3rd place) was considered and dropped — the demo must not depend on any live match. Verify the `game_finalised` `seq` against `/scores/historical/18241006` before building the keeper integration test. |
