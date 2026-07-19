@@ -99,7 +99,15 @@ export default function ClaimsPage() {
     <div className="mx-auto w-full max-w-5xl">
       <section className="mb-6 fade-up">
         <h1 className="font-display text-4xl font-extrabold uppercase tracking-wide sm:text-5xl">
-          Pending claims
+          {total > 0 ? (
+            <>
+              You have{' '}
+              <span className="text-gold-300">{formatSol(total)} SOL</span> to
+              collect
+            </>
+          ) : (
+            'Pending claims'
+          )}
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted sm:text-base">
           Refunds from commitments that resolved <em>not met</em> or were

@@ -34,7 +34,7 @@ export function InPlayCard({
   competition?: string | null;
   kickoffTs?: number | null;
 }) {
-  const { score, state, hasData } = useLiveScore(fixtureId);
+  const { score, events, state, hasData } = useLiveScore(fixtureId);
   const home = homeTeam ?? 'Home';
   const away = awayTeam ?? 'Away';
 
@@ -159,11 +159,30 @@ export function InPlayCard({
                 away,
                 score.stats.homePens,
                 score.stats.awayPens,
-              ) +
-              (hasData
-                ? ` · ${score.homeGoals}–${score.awayGoals}${score.minute ? ` (${score.minute})` : ''}`
-                : '')}
+                score.minute ? `(${score.minute})` : inPlay ? '(LIVE)' : '',
+              )}
       </div>
+
+      {!resolvedOnChain && events.length > 0 && (
+        <div className="mx-5 mb-5 flex flex-col gap-1 border-t border-edge/60 pt-3 text-left text-xs text-muted">
+          {events
+            .filter((e) =>
+              ['goal', 'card', 'period'].includes(e.kind),
+            )
+            .slice(-6)
+            .map((e) => (
+              <div key={e.id} className="flex gap-2">
+                <span className="shrink-0 font-mono text-muted/70">
+                  {e.minute ?? '—'}
+                </span>
+                <span>
+                  {e.kind === 'goal' ? '⚽ ' : ''}
+                  {e.label}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
     </section>
   );
 }

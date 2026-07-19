@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { useEscrow } from '@/hooks/useEscrow';
+import { fetchOdds } from '@/lib/api';
 import {
   buildConditionParam,
   CONDITION_OPTIONS,
@@ -18,7 +19,7 @@ import {
   TEMPLATE_WINS_ON_PENS,
   type ConditionOption,
 } from '@/lib/conditions';
-import { MIN_DEPOSIT_SOL } from '@/lib/config';
+import { explorerAddressUrl, MIN_DEPOSIT_SOL } from '@/lib/config';
 import {
   canCreatePledge,
   fixtureBucket,
@@ -27,6 +28,7 @@ import {
   isPledgeResultsPending,
 } from '@/lib/fixtures';
 import { solToLamports, truncateAddress, utf8ByteLength } from '@/lib/format';
+import { formatImpliedChip, impliedPct, type MarketOdds } from '@/lib/odds';
 import type { Fixture } from '@/lib/types';
 import { toastTxError, toastTxSuccess } from './toast';
 
@@ -118,6 +120,19 @@ export function CreateCommitmentForm({
   const [amount, setAmount] = useState('');
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [odds, setOdds] = useState<MarketOdds | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchOdds(fixture.fixtureId)
+      .then((o) => {
+        if (!cancelled) setOdds(o);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [fixture.fixtureId]);
 
   const now = Date.now();
   const worldCup = isKnockoutWorldCupFixture(fixture);
@@ -259,6 +274,20 @@ export function CreateCommitmentForm({
           <div className="flex flex-col gap-2">
             {CONDITION_OPTIONS.map((opt) => {
               const active = template === opt.template;
+              const chipParam = buildConditionParam(
+                opt.template === TEMPLATE_TEAM_WINS && includePens
+                  ? TEMPLATE_WINS_ON_PENS
+                  : opt.template,
+                team,
+                opt.needsThreshold
+                  ? Math.min(opt.maxN ?? 10, Math.max(opt.minN ?? 1, threshold))
+                  : 0,
+              );
+              const chipTpl =
+                opt.template === TEMPLATE_TEAM_WINS && includePens && active
+                  ? TEMPLATE_WINS_ON_PENS
+                  : opt.template;
+              const pct = impliedPct(odds, chipTpl, chipParam);
               return (
                 <button
                   key={opt.template}
@@ -272,10 +301,19 @@ export function CreateCommitmentForm({
                 >
                   <p className="text-sm font-bold text-ink">{opt.title}</p>
                   <p className="mt-0.5 text-xs text-muted">{opt.blurb}</p>
+                  {pct != null && (
+                    <p className="mt-2 inline-flex rounded-lg border border-pitch-700/40 bg-pitch-500/10 px-2 py-0.5 text-[11px] font-semibold text-pitch-400">
+                      {formatImpliedChip(pct)}
+                    </p>
+                  )}
                 </button>
               );
             })}
           </div>
+          <p className="mt-3 text-[11px] text-muted">
+            Market pulse from TxLINE consensus odds — context, not a promise. Your
+            pledge settles on the final result only.
+          </p>
 
           {selected?.needsTeam && (
             <div className="mt-4 rounded-xl border border-edge bg-raised/50 p-4">
@@ -400,6 +438,16 @@ export function CreateCommitmentForm({
             />
             {beneficiary && !beneficiaryValid && (
               <p className="mt-1.5 text-xs text-red-400">Not a valid Solana address.</p>
+            )}
+            {beneficiaryValid && (
+              <a
+                href={explorerAddressUrl(beneficiary)}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-block text-xs font-semibold text-pitch-400 hover:underline"
+              >
+                Verify beneficiary on explorer ↗
+              </a>
             )}
             <p className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
               This address is unverified and cannot be changed after you sign.

@@ -232,23 +232,49 @@ export function createKeeper({ cfg, txline, chain }) {
 
   // ---------- replay mode (design §7.7, docs/demo.md) ----------
 
-  async function runReplay() {
+  async function runReplay(speedMs = 150) {
     const fixtureId = cfg.replayFixtureId;
     log.info(`[keeper] REPLAY mode: fetching /scores/historical/${fixtureId}`);
     const records = await txline.getScoresHistorical(fixtureId);
-
-    // Forward the historical timeline onto the score bus so the in-play
-    // proxy behaves exactly as in live mode.
-    for (const r of records ?? []) scoreBus.emit('score', r);
-
+    const interesting = (records ?? []).filter((r) => {
+      const action = String(r.Action ?? r.action ?? '').toLowerCase();
+      return [
+        'kickoff',
+        'goal',
+        'yellow_card',
+        'red_card',
+        'halftime_finalised',
+        'game_finalised',
+        'status',
+        'corner',
+        'penalty',
+      ].some((k) => action.includes(k));
+    });
+    const timeline = interesting.length > 0 ? interesting : records ?? [];
+    log.info(
+      `[keeper] replay run: ${timeline.length} events @ ${speedMs}ms (paced for demo)`,
+    );
+    for (const r of timeline) {
+      scoreBus.emit('score', r);
+      await new Promise((res) => setTimeout(res, speedMs));
+    }
     const finalised = (records ?? []).find(isFinalisedEvent);
     if (!finalised) {
       throw new Error(
-        `replay fixture ${fixtureId} has no record with action=game_finalised and statusId=100`
+        `replay fixture ${fixtureId} has no record with action=game_finalised and statusId=100`,
       );
     }
     log.info(`[keeper] replay found finalised record: seq ${finalised.seq}`);
+    resolvedFixtures.delete(fixtureId); // allow re-run
     await handleFinalised(finalised.FixtureId ?? fixtureId, finalised.seq);
+  }
+
+  /** Manual paced replay trigger (POST /api/replay/run?speedMs=). */
+  async function startPacedReplay(speedMs = 150) {
+    if (cfg.replayFixtureId == null) {
+      throw new Error('REPLAY_FIXTURE_ID is not set');
+    }
+    return runReplay(speedMs);
   }
 
   // ---------- manual resolve (design §7.8, POST /api/resolve/:pubkey) ----------
@@ -319,7 +345,7 @@ export function createKeeper({ cfg, txline, chain }) {
   function start() {
     if (cfg.replayFixtureId != null) {
       log.info(`[keeper] REPLAY_FIXTURE_ID=${cfg.replayFixtureId} — skipping SSE and poll loops`);
-      runReplay().catch((e) => log.error('[keeper] replay failed', e.message));
+      runReplay(150).catch((e) => log.error('[keeper] replay failed', e.message));
       return;
     }
     // BUG-04 fix: live SSE subscription is wired at boot, replay is opt-in.
@@ -359,6 +385,7 @@ export function createKeeper({ cfg, txline, chain }) {
     getOpenCommitments,
     handleFinalised,
     resolveByPubkey,
+    startPacedReplay,
     pollScores,
     pollFixtures,
     loadActiveCommitments,

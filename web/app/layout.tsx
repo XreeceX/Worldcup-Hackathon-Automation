@@ -4,6 +4,7 @@ import localFont from "next/font/local";
 import { Toaster } from "react-hot-toast";
 import { ClientProviders } from "@/components/ClientProviders";
 import { Header } from "@/components/Header";
+import { LiveTicker } from "@/components/LiveTicker";
 import "./globals.css";
 
 const figtree = Figtree({
@@ -42,6 +43,7 @@ export default function RootLayout({
       >
         <ClientProviders>
           <Header />
+          <LiveTicker />
           <main className="app-main flex-1">{children}</main>
           <footer className="app-pad border-t border-edge/60 py-4 text-center text-[11px] text-muted/60">
             Solana devnet · Settlement proven on-chain by TxLINE Merkle proofs ·

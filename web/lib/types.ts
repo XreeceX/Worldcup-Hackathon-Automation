@@ -67,9 +67,11 @@ export interface ClaimRow {
 
 /** Event emitted on the keeper /api/feed SSE stream. */
 export interface FeedEvent {
-  type: string; // 'resolved' | ...
+  type: string; // 'resolved' | 'voided' | ...
   conditionMet?: boolean;
   txSig?: string;
+  fixtureId?: number;
+  status?: CommitmentStatus;
   commitment?: Partial<BoardCommitment> & { pubkey?: string };
   receivedAt: number;
 }

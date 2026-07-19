@@ -135,7 +135,7 @@ export function createServer({ cfg, keeper }) {
     }
   });
 
-  // Manual resolve trigger — fallback for keeper downtime (design §10.7).
+  // Manual resolve trigger — fallback for keeper downtime (design §7.8).
   app.post('/api/resolve/:commitmentPubkey', async (req, res) => {
     try {
       const result = await keeper.resolveByPubkey(req.params.commitmentPubkey);
@@ -143,6 +143,23 @@ export function createServer({ cfg, keeper }) {
     } catch (e) {
       log.error(`[server] manual resolve failed for ${req.params.commitmentPubkey}`, e.message);
       res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Paced historical replay for demos (requires REPLAY_FIXTURE_ID).
+  app.post('/api/replay/run', async (req, res) => {
+    try {
+      if (keeper.mode !== 'replay') {
+        return res.status(400).json({ error: 'not in replay mode — set REPLAY_FIXTURE_ID' });
+      }
+      const speed = Number(req.query.speedMs ?? 150);
+      const speedMs = Number.isFinite(speed) && speed > 0 ? speed : 150;
+      keeper.startPacedReplay(speedMs).catch((e) =>
+        log.error('[server] paced replay failed', e.message),
+      );
+      res.status(202).json({ started: true, speedMs });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
     }
   });
 

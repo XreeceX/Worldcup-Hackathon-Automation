@@ -104,6 +104,19 @@ body {
   }
 }
 
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee {
+  animation: marquee 40s linear infinite;
+}
+
 /* Wallet adapter modal — high z-index so it isn't trapped under sticky header */
 .wallet-adapter-modal-wrapper {
   z-index: 10000 !important;
