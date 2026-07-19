@@ -680,21 +680,26 @@
     },
     {
       "code": 6019,
+      "name": "SelfBeneficiary",
+      "msg": "Beneficiary cannot be your own wallet"
+    },
+    {
+      "code": 6020,
       "name": "WrongOracleProgram",
       "msg": "Not the TxLINE oracle program"
     },
     {
-      "code": 6020,
+      "code": 6021,
       "name": "FixtureNotCancelled",
       "msg": "Fixture is not cancelled"
     },
     {
-      "code": 6021,
+      "code": 6022,
       "name": "ProofInvalid",
       "msg": "Merkle proof failed validation"
     },
     {
-      "code": 6022,
+      "code": 6023,
       "name": "TimeoutNotReached",
       "msg": "7-day timeout not reached"
     }
