@@ -180,27 +180,29 @@ export function CreateCommitmentForm({
 
   const beneficiaryValid = useMemo(() => {
     try {
-      return beneficiary.length > 0 && Boolean(new PublicKey(beneficiary));
+      if (!beneficiary) return false;
+      const pk = new PublicKey(beneficiary);
+      if (publicKey && pk.equals(publicKey)) return false;
+      return true;
     } catch {
       return false;
     }
-  }, [beneficiary]);
+  }, [beneficiary, publicKey]);
 
-  /** A pledge pays someone else — block routing the vault back to the pledger. */
   const beneficiaryIsSelf = useMemo(() => {
-    if (!beneficiaryValid || !publicKey) return false;
+    if (!publicKey || !beneficiary) return false;
     try {
       return new PublicKey(beneficiary).equals(publicKey);
     } catch {
       return false;
     }
-  }, [beneficiaryValid, beneficiary, publicKey]);
+  }, [beneficiary, publicKey]);
 
   const amountNum = Number(amount);
   const amountValid = Number.isFinite(amountNum) && amountNum >= MIN_DEPOSIT_SOL;
   const nameBytes = utf8ByteLength(name || defaultName);
   const nameValid = nameBytes <= 64;
-  const step2Valid = beneficiaryValid && !beneficiaryIsSelf && amountValid && nameValid;
+  const step2Valid = beneficiaryValid && amountValid && nameValid;
   const step1Valid = template != null;
 
   function pickTemplate(opt: ConditionOption) {
@@ -470,15 +472,13 @@ export function CreateCommitmentForm({
               spellCheck={false}
             />
             {beneficiary && !beneficiaryValid && (
-              <p className="mt-1.5 text-xs text-red-400">Not a valid Solana address.</p>
-            )}
-            {beneficiaryIsSelf && (
               <p className="mt-1.5 text-xs text-red-400">
-                That&apos;s your connected wallet. A pledge pays someone else —
-                enter the recipient&apos;s address, not your own.
+                {beneficiaryIsSelf
+                  ? 'Beneficiary cannot be your own wallet — pick a cause or another address.'
+                  : 'Not a valid Solana address.'}
               </p>
             )}
-            {beneficiaryValid && !beneficiaryIsSelf && (
+            {beneficiaryValid && (
               <a
                 href={explorerAddressUrl(beneficiary)}
                 target="_blank"
