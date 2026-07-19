@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  EST_FULL_TIME_MS,
   MATCH_WINDOW_MS,
+  fixtureBucket,
 } from '@/lib/fixtures';
 import { getFixturesSnapshot, hasTxlineToken } from '@/lib/server/txline';
 import {
@@ -22,12 +22,8 @@ function decodePackedFixtureId(packed: bigint | number | string) {
   };
 }
 
-function fixtureBucket(gameState: number, kickoffTsMs: number, nowMs = Date.now()) {
-  if ([5, 10, 13, 15, 16, 100].includes(gameState)) return 'finished';
-  if (gameState >= 2) return 'live';
-  if (kickoffTsMs > nowMs) return 'upcoming';
-  if (nowMs - kickoffTsMs >= EST_FULL_TIME_MS) return 'finished';
-  return 'live';
+function statusFor(gameState: number, kickoffTsMs: number, nowMs = Date.now()) {
+  return fixtureBucket({ gameState, kickoffTs: kickoffTsMs, status: 'upcoming' }, nowMs);
 }
 
 function mapTxlineFixture(raw: Record<string, unknown>) {
@@ -89,7 +85,7 @@ function scheduleFixtures() {
         competition: 'World Cup',
         kickoffTs,
         gameState: 0,
-        status: fixtureBucket(0, kickoffTs, now),
+        status: statusFor(0, kickoffTs, now),
       };
     });
 }
@@ -122,7 +118,7 @@ export async function GET(req: NextRequest) {
           // Prefer TxLINE names/state when present.
           byId.set(mapped.fixtureId, {
             ...mapped,
-            status: fixtureBucket(mapped.gameState, mapped.kickoffTs),
+            status: statusFor(mapped.gameState, mapped.kickoffTs),
           });
         }
       } catch (e) {
@@ -133,7 +129,7 @@ export async function GET(req: NextRequest) {
     const now = Date.now();
     let mapped = Array.from(byId.values()).map((f) => ({
       ...f,
-      status: fixtureBucket(f.gameState, f.kickoffTs, now),
+      status: statusFor(f.gameState, f.kickoffTs, now),
     }));
 
     // Drop ancient non-schedule noise outside match window interest.

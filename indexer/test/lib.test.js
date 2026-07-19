@@ -149,6 +149,8 @@ test('fixtureBucket: upcoming / live / finished', () => {
   // stale game_state 0 past est. FT (~105m) → finished, not live
   assert.equal(fixtureBucket(0, now - 2 * 3_600_000, now), 'finished');
   assert.equal(fixtureBucket(0, now - 6 * 3_600_000, now), 'finished');
-  // explicit in-play after est. FT still live (ET / pens)
+  // explicit in-play after est. FT still live (ET / pens) inside match window
   assert.equal(fixtureBucket(8, now - 2 * 3_600_000, now), 'live');
+  // stale in-play past 3.5h match window → finished
+  assert.equal(fixtureBucket(4, now - 4 * 3_600_000, now), 'finished');
 });

@@ -1,5 +1,6 @@
 import { INDEXER_URL, KEEPER_URL } from './config';
 import {
+  EST_FULL_TIME_MS,
   MATCH_WINDOW_MS,
   applyScoreLifecycle,
   fixtureBucket,
@@ -104,22 +105,52 @@ async function hydrateFixtureLifecycle(fixtures: Fixture[]): Promise<Fixture[]> 
     return fixtureBucket(f, now) === 'live' || Number(f.gameState) >= 2;
   });
 
-  if (!candidates.length) return fixtures;
+  // Force-finish anything past regulation FT with unknown/stale NS state.
+  let next = fixtures.map((f) => {
+    const ko = Number(f.kickoffTs);
+    if (
+      Number.isFinite(ko) &&
+      ko > 0 &&
+      now - ko >= EST_FULL_TIME_MS &&
+      now - ko < MATCH_WINDOW_MS &&
+      (!Number.isFinite(Number(f.gameState)) || Number(f.gameState) < 2) &&
+      f.status !== 'finished'
+    ) {
+      return { ...f, gameState: 100, status: 'finished' as const };
+    }
+    return f;
+  });
+
+  if (!candidates.length) return next;
 
   const patches = new Map<number, Fixture>();
   await Promise.all(
     candidates.map(async (f) => {
       try {
         const rows = await fetchScoreFeed(f.fixtureId);
-        if (!rows.length) return;
+        if (!rows.length) {
+          // No score rows after kickoff + regulation → treat as finished once past soft FT.
+          if (now - Number(f.kickoffTs) >= EST_FULL_TIME_MS) {
+            patches.set(f.fixtureId, {
+              ...f,
+              gameState: 100,
+              status: 'finished',
+            });
+          }
+          return;
+        }
         const built = buildMatchFromRecords(rows);
         if (!built.hasData) return;
         patches.set(
           f.fixtureId,
-          applyScoreLifecycle(f, {
-            finalised: built.score.finalised,
-            statusId: built.score.statusId,
-          }),
+          applyScoreLifecycle(
+            f,
+            {
+              finalised: built.score.finalised,
+              statusId: built.score.statusId,
+            },
+            now,
+          ),
         );
       } catch {
         /* score optional */
@@ -127,8 +158,9 @@ async function hydrateFixtureLifecycle(fixtures: Fixture[]): Promise<Fixture[]> 
     }),
   );
 
-  if (!patches.size) return fixtures;
-  return fixtures.map((f) => patches.get(f.fixtureId) ?? f);
+  if (!patches.size) return next;
+  next = next.map((f) => patches.get(f.fixtureId) ?? f);
+  return next;
 }
 
 function withDerivedStatus(f: Fixture): Fixture {

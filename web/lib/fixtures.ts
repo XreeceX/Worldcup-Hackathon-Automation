@@ -18,30 +18,44 @@ export type FixtureBucket = 'upcoming' | 'live' | 'finished';
 
 const FINISHED_GAME_STATES = new Set([5, 10, 13, 15, 16, 100]);
 
+export function isFinishedGameState(gs: number | null | undefined): boolean {
+  return gs != null && FINISHED_GAME_STATES.has(Number(gs));
+}
+
 /**
  * Past / live / upcoming from fixture metadata.
  * Do NOT trust a derived `status` string alone — indexer often leaves game_state
  * at 0 after FT, which previously kept matches "live" for the full 3.5h window.
- * Explicit in-play game states (H1/HT/H2/ET) stay live; NS/unknown uses est. FT.
+ * Explicit in-play game states (H1/HT/H2/ET) stay live only inside the match
+ * window — stale TxLINE packed states must not keep a match "live" forever.
  */
 export function fixtureBucket(
   fixture: Pick<Fixture, 'gameState' | 'kickoffTs' | 'status'>,
   nowMs = Date.now(),
 ): FixtureBucket {
+  if (fixture.status === 'finished') return 'finished';
+
   const gs = Number(fixture.gameState);
-  if (FINISHED_GAME_STATES.has(gs)) return 'finished';
-  // Trust explicit in-play states (extra time, pens, etc.).
-  if (Number.isFinite(gs) && gs >= 2) return 'live';
+  if (isFinishedGameState(gs)) return 'finished';
 
   const kickoff = Number(fixture.kickoffTs);
   if (Number.isFinite(kickoff) && kickoff > 0) {
     if (kickoff > nowMs) return 'upcoming';
-    // Stale NS (0/1): after regulation FT, treat as finished — matches Match Centre.
-    if (nowMs - kickoff >= EST_FULL_TIME_MS) return 'finished';
+    // Hard stop: past ET/pens window → finished even if game_state is still "H2".
+    if (nowMs - kickoff >= MATCH_WINDOW_MS) return 'finished';
+    // Soft stop when TxLINE never flipped out of NS/unknown.
+    if ((!Number.isFinite(gs) || gs < 2) && nowMs - kickoff >= EST_FULL_TIME_MS) {
+      return 'finished';
+    }
+  }
+
+  // Trust explicit in-play states only while inside the match window.
+  if (Number.isFinite(gs) && gs >= 2) return 'live';
+
+  if (Number.isFinite(kickoff) && kickoff > 0) {
     return 'live';
   }
 
-  if (fixture.status === 'finished') return 'finished';
   if (fixture.status === 'upcoming') return 'upcoming';
   if (fixture.status === 'live') return 'live';
   return 'finished';
@@ -66,15 +80,21 @@ export function isMatchEnded(
 export function applyScoreLifecycle(
   fixture: Fixture,
   opts: { finalised?: boolean; statusId?: number | null },
+  nowMs = Date.now(),
 ): Fixture {
-  if (opts.finalised || (opts.statusId != null && FINISHED_GAME_STATES.has(opts.statusId))) {
+  if (opts.finalised || isFinishedGameState(opts.statusId)) {
     return {
       ...fixture,
-      gameState: opts.statusId != null && FINISHED_GAME_STATES.has(opts.statusId)
-        ? opts.statusId
-        : 100,
+      gameState:
+        opts.statusId != null && isFinishedGameState(opts.statusId)
+          ? opts.statusId
+          : 100,
       status: 'finished',
     };
+  }
+  // Don't promote to live if the kickoff window already expired.
+  if (fixtureBucket(fixture, nowMs) === 'finished') {
+    return { ...fixture, status: 'finished', gameState: fixture.gameState || 100 };
   }
   if (opts.statusId != null && opts.statusId >= 2) {
     return {
@@ -84,6 +104,35 @@ export function applyScoreLifecycle(
     };
   }
   return fixture;
+}
+
+/**
+ * Merge a fresh fixture list onto prior state without regressing lifecycle
+ * (finished must never flip back to live/upcoming from a stale poll).
+ */
+export function mergeFixturesMonotonic(
+  prev: Fixture[],
+  next: Fixture[],
+  nowMs = Date.now(),
+): Fixture[] {
+  const prevById = new Map(prev.map((f) => [f.fixtureId, f]));
+  return next.map((f) => {
+    const old = prevById.get(f.fixtureId);
+    if (!old) return f;
+    const oldBucket = fixtureBucket(old, nowMs);
+    const newBucket = fixtureBucket(f, nowMs);
+    if (oldBucket === 'finished' && newBucket !== 'finished') {
+      return {
+        ...f,
+        gameState: isFinishedGameState(old.gameState) ? old.gameState : 100,
+        status: 'finished',
+      };
+    }
+    if (oldBucket === 'live' && newBucket === 'upcoming') {
+      return { ...f, status: 'live', gameState: Math.max(Number(f.gameState) || 0, 2) };
+    }
+    return f;
+  });
 }
 
 /**

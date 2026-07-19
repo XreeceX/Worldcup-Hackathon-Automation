@@ -17,6 +17,7 @@ import {
   canCreatePledge,
   isKnockoutWorldCupFixture,
   isMatchEnded,
+  mergeFixturesMonotonic,
   worldCupFixtures,
 } from '@/lib/fixtures';
 import { isKnockoutStage, stageForFixtureId } from '@/lib/wcSchedule';
@@ -36,7 +37,7 @@ export default function BoardPage() {
 
   const live = useLiveScore(fixtureId);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isLatest: () => boolean) => {
     const [boardRes, fixturesRes] = await Promise.allSettled([
       fetchBoard({
         fixtureId: fixtureId ?? undefined,
@@ -45,22 +46,34 @@ export default function BoardPage() {
       }),
       fetchFixtures(),
     ]);
+    if (!isLatest()) return;
     if (boardRes.status === 'fulfilled') {
       setCommitments(boardRes.value);
       setIndexerDown(false);
     } else {
       setIndexerDown(true);
     }
-    if (fixturesRes.status === 'fulfilled') setFixtures(fixturesRes.value);
+    if (fixturesRes.status === 'fulfilled') {
+      setFixtures((prev) => mergeFixturesMonotonic(prev, fixturesRes.value));
+    }
   }, [fixtureId, status, sort]);
 
   useEffect(() => {
     let cancelled = false;
+    let generation = 0;
+
+    const run = () => {
+      const gen = ++generation;
+      return load(() => !cancelled && generation === gen);
+    };
+
     setLoading(true);
-    load().finally(() => {
+    run().finally(() => {
       if (!cancelled) setLoading(false);
     });
-    const timer = setInterval(load, REFRESH_MS);
+    const timer = setInterval(() => {
+      void run();
+    }, REFRESH_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);

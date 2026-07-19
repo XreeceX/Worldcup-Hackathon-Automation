@@ -171,15 +171,27 @@ export function mapFixtureRecord(raw) {
 /** Earliest plausible full-time after kickoff (90' + stoppage buffer). */
 const EST_FULL_TIME_MS = 105 * 60 * 1000;
 
+/** Longest plausible match window (ET + shootout + stoppages). */
+const MATCH_WINDOW_MS = 3.5 * 60 * 60 * 1000;
+
 /** Fixture lifecycle bucket used by GET /api/fixtures?status=. */
 export function fixtureBucket(gameState, kickoffTsMs, nowMs = Date.now()) {
   const gs = Number(gameState);
   if ([5, 10, 13, 15, 16, 100].includes(gs)) return 'finished';
-  // Explicit in-play (H1/HT/H2/ET/pens) — trust TxLINE game_state.
-  if (gs >= 2) return 'live';
-  // NS / unknown: snapshot often leaves game_state 0 after FT. Use est. FT
-  // instead of a multi-hour "live" window so lists match score finalisation.
-  if (Number(kickoffTsMs) > nowMs) return 'upcoming';
-  if (nowMs - Number(kickoffTsMs) >= EST_FULL_TIME_MS) return 'finished';
-  return 'live';
+
+  const kickoff = Number(kickoffTsMs);
+  if (Number.isFinite(kickoff) && kickoff > 0) {
+    if (kickoff > nowMs) return 'upcoming';
+    // Hard stop: past ET/pens window → finished even if game_state is still "H2".
+    if (nowMs - kickoff >= MATCH_WINDOW_MS) return 'finished';
+    // Soft stop when TxLINE never flipped out of NS/unknown.
+    if ((!Number.isFinite(gs) || gs < 2) && nowMs - kickoff >= EST_FULL_TIME_MS) {
+      return 'finished';
+    }
+  }
+
+  // Explicit in-play only while inside the match window.
+  if (Number.isFinite(gs) && gs >= 2) return 'live';
+  if (Number.isFinite(kickoff) && kickoff > 0) return 'live';
+  return 'finished';
 }
