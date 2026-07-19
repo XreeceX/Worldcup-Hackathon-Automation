@@ -29,19 +29,19 @@ devnet wallet.
 
 1. Import the GitHub repo on [vercel.com](https://vercel.com).
 2. Set **Root Directory** to `web` (critical — monorepo).
-3. Add Environment Variables (Production):
+3. Add Environment Variables:
 
-| Name | Value |
-|---|---|
-| `NEXT_PUBLIC_RPC_URL` | `https://api.devnet.solana.com` |
-| `NEXT_PUBLIC_PROGRAM_ID` | `3uyiF93zMvUcP2o1Cqnt2iS4bXwYeBcTMTvbaTf5B3RJ` |
-| `NEXT_PUBLIC_INDEXER_URL` | your public indexer HTTPS URL (no trailing slash) |
-| `NEXT_PUBLIC_KEEPER_URL` | your public keeper HTTPS URL (no trailing slash) |
+| Name | Required | Value |
+|---|---|---|
+| `NEXT_PUBLIC_RPC_URL` | yes | `https://api.devnet.solana.com` |
+| `NEXT_PUBLIC_PROGRAM_ID` | yes | `3uyiF93zMvUcP2o1Cqnt2iS4bXwYeBcTMTvbaTf5B3RJ` |
+| `TXLINE_API_TOKEN` | yes (scores) | from `~/.secrets/txline-devnet-creds.json` → `apiToken` |
+| `TXLINE_JWT` | optional | guest JWT (auto-refreshed if omitted) |
+| `NEXT_PUBLIC_INDEXER_URL` | **leave unset** | same-origin `/api/*` BFF |
+| `NEXT_PUBLIC_KEEPER_URL` | **leave unset** | same-origin `/api/*` BFF |
 
-4. Deploy. On keeper + indexer, set `CORS_ORIGIN` to include the Vercel URL  
-   (e.g. `https://your-app.vercel.app` or `*` for the hackathon).
-
-Until indexer/keeper are hosted, the site still loads; board/live data show degraded/empty states.
+4. Deploy. Do **not** point indexer/keeper at localhost — on Vercel the Next.js
+   API routes mirror the local indexer+keeper (board from chain, scores from TxLINE).
 
 ## Environment (`NEXT_PUBLIC_*`)
 
@@ -49,8 +49,8 @@ Until indexer/keeper are hosted, the site still loads; board/live data show degr
 |---|---|---|
 | `NEXT_PUBLIC_RPC_URL` | `https://api.devnet.solana.com` | Solana devnet RPC |
 | `NEXT_PUBLIC_PROGRAM_ID` | `3uyiF93zMvUcP2o1Cqnt2iS4bXwYeBcTMTvbaTf5B3RJ` | Commitment program |
-| `NEXT_PUBLIC_INDEXER_URL` | `http://localhost:3002` | Indexer query API (board, claims, fixtures) |
-| `NEXT_PUBLIC_KEEPER_URL` | `http://localhost:3001` | Keeper (feed SSE, score proxy SSE, manual resolve) |
+| `NEXT_PUBLIC_INDEXER_URL` | local `http://localhost:3002` / Vercel `""` | Indexer (or same-origin BFF) |
+| `NEXT_PUBLIC_KEEPER_URL` | local `http://localhost:3001` / Vercel `""` | Keeper (or same-origin BFF) |
 
 ## Pages
 
