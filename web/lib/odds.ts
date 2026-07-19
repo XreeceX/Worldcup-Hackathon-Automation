@@ -106,6 +106,9 @@ export function impliedPct(
   return null;
 }
 
-export function formatImpliedChip(pct: number): string {
-  return `Market pulse · ${Math.round(pct)}% implied chance`;
+export function formatImpliedChip(pct: number, outcome?: string): string {
+  const chance = `${Math.round(pct)}% implied chance`;
+  return outcome
+    ? `Market pulse · ${outcome} — ${chance}`
+    : `Market pulse · ${chance}`;
 }

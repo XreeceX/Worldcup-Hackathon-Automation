@@ -120,6 +120,21 @@ export function ConnectMenu() {
           <div className="absolute right-0 z-[100] mt-2 w-48 rounded-xl border border-edge bg-surface p-2 shadow-xl">
             <button
               type="button"
+              className="btn-secondary mb-1 w-full !justify-start"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(publicKey.toBase58());
+                  toastSuccess('Address copied');
+                } catch {
+                  toastError('Clipboard unavailable — copy from your wallet app');
+                }
+                setOpen(false);
+              }}
+            >
+              Copy address
+            </button>
+            <button
+              type="button"
               className="btn-danger w-full !justify-start"
               onClick={async () => {
                 await disconnect();

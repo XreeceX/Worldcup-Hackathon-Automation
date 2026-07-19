@@ -313,7 +313,15 @@ export function CreateCommitmentForm({
                   <p className="mt-0.5 text-xs text-muted">{opt.blurb}</p>
                   {pct != null && (
                     <p className="mt-2 inline-flex rounded-lg border border-pitch-700/40 bg-pitch-500/10 px-2 py-0.5 text-[11px] font-semibold text-pitch-400">
-                      {formatImpliedChip(pct)}
+                      {formatImpliedChip(
+                        pct,
+                        conditionLabel(
+                          chipTpl,
+                          chipParam,
+                          fixture.homeTeam,
+                          fixture.awayTeam,
+                        ),
+                      )}
                     </p>
                   )}
                 </button>
@@ -329,20 +337,35 @@ export function CreateCommitmentForm({
             <div className="mt-4 rounded-xl border border-edge bg-raised/50 p-4">
               <p className="label">Team</p>
               <div className="flex flex-wrap gap-2">
-                {[fixture.homeTeam, fixture.awayTeam].map((t, i) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTeam(i)}
-                    className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
-                      team === i
-                        ? 'border-pitch-500 bg-pitch-500/15 text-pitch-400'
-                        : 'border-edge text-muted hover:text-ink'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
+                {[fixture.homeTeam, fixture.awayTeam].map((t, i) => {
+                  const teamPct =
+                    effectiveTemplate == null
+                      ? null
+                      : impliedPct(
+                          odds,
+                          effectiveTemplate,
+                          buildConditionParam(effectiveTemplate, i, threshold),
+                        );
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTeam(i)}
+                      className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
+                        team === i
+                          ? 'border-pitch-500 bg-pitch-500/15 text-pitch-400'
+                          : 'border-edge text-muted hover:text-ink'
+                      }`}
+                    >
+                      {t}
+                      {teamPct != null && (
+                        <span className="ml-1.5 font-mono text-xs opacity-80">
+                          {Math.round(teamPct)}%
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
 
               {template === TEMPLATE_TEAM_WINS && (

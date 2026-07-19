@@ -20,24 +20,33 @@ export async function GET(
       return NextResponse.json({ error: 'fixtureId required' }, { status: 400 });
     }
 
-    let rows = await getOddsSnapshot(fixtureId);
-    let asOfKickoff = false;
-    const empty =
-      !Array.isArray(rows) ||
-      rows.length === 0 ||
-      (Array.isArray(rows) && rows.every((r) => !r));
+    const condensed = condenseOddsSnapshot(await getOddsSnapshot(fixtureId));
+    condensed.asOfKickoff = false;
 
-    if (empty) {
-      const sched = WC_2026_SCHEDULE[fixtureId];
-      if (sched) {
-        const kickoff = Date.parse(sched.kickoffIso);
-        rows = await getOddsSnapshot(fixtureId, kickoff - 5 * 60_000);
-        asOfKickoff = true;
+    // The live snapshot can carry a partial book (e.g. 1X2 quoted but
+    // over/under suspended). Backfill whichever market group is missing
+    // from the as-of-kickoff snapshot so chips don't flicker away.
+    const needs1x2 = condensed.homeWinPct == null;
+    const needsOver = Object.keys(condensed.over).length === 0;
+    const sched = WC_2026_SCHEDULE[fixtureId];
+    if (sched && (needs1x2 || needsOver)) {
+      const kickoff = Date.parse(sched.kickoffIso);
+      const fallback = condenseOddsSnapshot(
+        await getOddsSnapshot(fixtureId, kickoff - 5 * 60_000),
+      );
+      if (needs1x2 && fallback.homeWinPct != null) {
+        condensed.homeWinPct = fallback.homeWinPct;
+        condensed.drawPct = fallback.drawPct;
+        condensed.awayWinPct = fallback.awayWinPct;
+        condensed.asOfKickoff = true;
       }
+      if (needsOver && Object.keys(fallback.over).length > 0) {
+        condensed.over = fallback.over;
+        condensed.asOfKickoff = true;
+      }
+      condensed.asOf ??= fallback.asOf;
     }
 
-    const condensed = condenseOddsSnapshot(rows);
-    condensed.asOfKickoff = asOfKickoff;
     return NextResponse.json(condensed);
   } catch (e) {
     console.error('[api/odds]', e);

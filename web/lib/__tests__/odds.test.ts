@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { condenseOddsSnapshot, impliedPct } from '../odds';
+import { condenseOddsSnapshot, formatImpliedChip, impliedPct } from '../odds';
 
 /** Row shapes captured from the live TxLINE odds snapshot API (fixture 18241006). */
 const SNAPSHOT = [
@@ -110,5 +110,17 @@ describe('impliedPct', () => {
   it('stays hidden when no market maps', () => {
     expect(impliedPct(odds, 0, 0)).toBeNull(); // BTTS has no market
     expect(impliedPct(odds, 4, 5)).toBeNull(); // no over-4.5 line in snapshot
+  });
+});
+
+describe('formatImpliedChip', () => {
+  it('names the outcome when a label is given', () => {
+    expect(formatImpliedChip(35.448, 'Spain wins')).toBe(
+      'Market pulse · Spain wins — 35% implied chance',
+    );
+  });
+
+  it('falls back to the bare chip without a label', () => {
+    expect(formatImpliedChip(33.411)).toBe('Market pulse · 33% implied chance');
   });
 });
