@@ -252,3 +252,18 @@ export async function fetchScoreFeed(
     return [];
   }
 }
+
+/** Market pulse odds (TxLINE StablePrice demargined %). */
+export async function fetchOdds(
+  fixtureId: number,
+): Promise<import('./odds').MarketOdds | null> {
+  const bases = [INDEXER_URL, ''];
+  for (const base of bases) {
+    try {
+      return await getJson(`${base}/api/odds/${fixtureId}`);
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}

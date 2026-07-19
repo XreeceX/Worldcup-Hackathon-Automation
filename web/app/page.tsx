@@ -8,10 +8,8 @@ import { CommitmentCard } from '@/components/CommitmentCard';
 import { CreateCommitmentForm } from '@/components/CreateCommitmentForm';
 import { EmptyState, LoadingGrid } from '@/components/EmptyState';
 import { FixtureBrowser } from '@/components/FixtureBrowser';
-import {
-  BoardToolbar,
-  type BoardStatusFilter,
-} from '@/components/FixtureFilter';
+import { BoardToolbar, type BoardStatusFilter } from '@/components/FixtureFilter';
+import { BoardStats } from '@/components/BoardStats';
 import { LiveFeed } from '@/components/LiveFeed';
 import { useLiveScore } from '@/hooks/useLiveScore';
 import { fetchBoard, fetchFixtures } from '@/lib/api';
@@ -160,15 +158,18 @@ export default function BoardPage() {
               paid out if your call lands, refunded if not.
             </p>
           </div>
-          {firstCreatable ? (
-            <button
-              type="button"
-              onClick={() => focusCreate(firstCreatable)}
-              className="btn-primary shrink-0 px-6 py-3 text-sm font-bold"
-            >
-              Create a pledge
-            </button>
-          ) : null}
+          <div className="flex flex-col items-stretch gap-4 sm:items-end">
+            <BoardStats rows={commitments} />
+            {firstCreatable ? (
+              <button
+                type="button"
+                onClick={() => focusCreate(firstCreatable)}
+                className="btn-primary shrink-0 px-6 py-3 text-sm font-bold"
+              >
+                Create a pledge
+              </button>
+            ) : null}
+          </div>
         </div>
       </section>
 

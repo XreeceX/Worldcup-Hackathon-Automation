@@ -9,3 +9,5 @@ program/.anchor/
 .next/
 *.log
 _keys/
+.tifo-peek/
+hackathon-template/

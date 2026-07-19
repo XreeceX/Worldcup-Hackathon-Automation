@@ -78,6 +78,20 @@ export async function getFixturesSnapshot(
   return res.json();
 }
 
+export async function getOddsSnapshot(
+  fixtureId: number,
+  asOfMs?: number,
+): Promise<unknown> {
+  let path = `/odds/snapshot/${fixtureId}`;
+  if (asOfMs != null && Number.isFinite(asOfMs)) {
+    path += `?asOf=${Math.floor(asOfMs)}`;
+  }
+  const res = await txlineFetch(path);
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`odds/snapshot ${res.status}`);
+  return res.json();
+}
+
 export function hasTxlineToken(): boolean {
   return Boolean(process.env.TXLINE_API_TOKEN);
 }

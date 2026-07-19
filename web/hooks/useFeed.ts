@@ -23,10 +23,14 @@ export function useFeed() {
       type: typeof ev.type === 'string' ? ev.type : 'event',
       conditionMet: typeof ev.conditionMet === 'boolean' ? ev.conditionMet : undefined,
       txSig: typeof ev.txSig === 'string' ? ev.txSig : undefined,
+      fixtureId: typeof ev.fixtureId === 'number' ? ev.fixtureId : undefined,
+      status: typeof ev.status === 'string' ? (ev.status as FeedEvent['status']) : undefined,
       commitment:
         ev.commitment && typeof ev.commitment === 'object'
           ? (ev.commitment as FeedEvent['commitment'])
-          : undefined,
+          : typeof ev.commitment === 'string'
+            ? { pubkey: ev.commitment }
+            : undefined,
       receivedAt: Date.now(),
     };
     setEvents((prev) => [feedEvent, ...prev].slice(0, MAX_EVENTS));

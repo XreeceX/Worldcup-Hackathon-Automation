@@ -207,7 +207,7 @@ export function evaluateCondition(
   }
 }
 
-/** Plain-language status line for the in-play card. */
+/** Plain-language status line for the in-play card (includes live score). */
 export function conditionStatusText(
   template: number,
   param: number,
@@ -217,51 +217,60 @@ export function conditionStatusText(
   awayTeam?: string,
   homePens = 0,
   awayPens = 0,
+  clock = '',
 ): string {
   const home = homeTeam ?? 'Home';
   const away = awayTeam ?? 'Away';
+  const score = `${homeGoals}–${awayGoals}`;
+  const clk = clock ? ` ${clock}` : '';
+
   if (template === TEMPLATE_BTTS) {
-    if (homeGoals > 0 && awayGoals > 0) return 'Both teams have scored ✓';
-    if (homeGoals > 0) return `${home} has scored — ${away} yet to score`;
-    if (awayGoals > 0) return `${away} has scored — ${home} yet to score`;
-    return 'Both teams yet to score';
+    if (homeGoals > 0 && awayGoals > 0)
+      return `Both teams have scored ✓ · ${score}${clk}`;
+    if (homeGoals > 0)
+      return `${home} have scored — waiting on ${away} · ${score}${clk}`;
+    if (awayGoals > 0)
+      return `${away} have scored — waiting on ${home} · ${score}${clk}`;
+    return `Both teams yet to score · ${score}${clk}`;
   }
   if (template === TEMPLATE_TEAM_WINS) {
     const team = param === 0 ? home : away;
     const diff = param === 0 ? homeGoals - awayGoals : awayGoals - homeGoals;
-    if (diff > 0) return `${team} is winning ✓`;
-    if (diff === 0) return `Level — ${team} needs a goal (pens do not count)`;
-    return `${team} is behind by ${-diff}`;
+    if (diff > 0)
+      return `${team} lead ✓ — holding until the whistle · ${score}${clk}`;
+    if (diff === 0)
+      return `Level — ${team} need a goal (pens do not count) · ${score}${clk}`;
+    return `${team} trail by ${-diff} · ${score}${clk}`;
   }
   if (template === TEMPLATE_DRAW) {
-    if (homeGoals === awayGoals) return 'Scores level ✓ (pens separate)';
-    return `Not level — ${homeGoals}–${awayGoals}`;
+    if (homeGoals === awayGoals) return `Scores level ✓ · ${score}${clk}`;
+    return `Not level · ${score}${clk}`;
   }
   if (template === TEMPLATE_TEAM_SCORES_AT_LEAST) {
     const { team, n } = unpackTeamThreshold(param);
     const side = team === 0 ? home : away;
     const goals = team === 0 ? homeGoals : awayGoals;
-    if (goals >= n) return `${side} has ${goals} — target ${n} ✓`;
-    return `${side} has ${goals} — need ${n}`;
+    if (goals >= n) return `${side} has ${goals} — target ${n} ✓ · ${score}${clk}`;
+    return `${side} has ${goals} — need ${n} · ${score}${clk}`;
   }
   if (template === TEMPLATE_TOTAL_GOALS_AT_LEAST) {
     const total = homeGoals + awayGoals;
     const n = Number(param);
-    if (total >= n) return `${total} goals — target ${n} ✓`;
-    return `${total} goals — need ${n}`;
+    if (total >= n) return `${total} of ${n} goals — condition met ✓ · ${score}${clk}`;
+    return `${total} of ${n} goals so far · ${score}${clk}`;
   }
   if (template === TEMPLATE_WINS_BY_AT_LEAST) {
     const { team, n } = unpackTeamThreshold(param);
     const side = team === 0 ? home : away;
     const diff = team === 0 ? homeGoals - awayGoals : awayGoals - homeGoals;
-    if (diff >= n) return `${side} ahead by ${diff} — margin ${n} ✓`;
-    if (diff > 0) return `${side} ahead by ${diff} — need ${n}`;
-    if (diff === 0) return `Level — ${side} needs a ${n}-goal cushion`;
-    return `${side} behind — need ${n}-goal win`;
+    if (diff >= n) return `${side} ahead by ${diff} — margin ${n} ✓ · ${score}${clk}`;
+    if (diff > 0) return `${side} ahead by ${diff} — need ${n} · ${score}${clk}`;
+    if (diff === 0) return `Level — ${side} needs a ${n}-goal cushion · ${score}${clk}`;
+    return `${side} behind — need ${n}-goal win · ${score}${clk}`;
   }
   if (template === TEMPLATE_WINS_ON_PENS) {
     const team = param === 0 ? home : away;
-    if (homePens + awayPens === 0) return 'Waiting for penalty shootout';
+    if (homePens + awayPens === 0) return `Waiting for penalty shootout · ${score}${clk}`;
     const diff = param === 0 ? homePens - awayPens : awayPens - homePens;
     if (diff > 0) return `${team} leads on pens ${homePens}–${awayPens} ✓`;
     if (diff === 0) return `Pens level ${homePens}–${awayPens}`;
@@ -269,7 +278,7 @@ export function conditionStatusText(
   }
   if (template === TEMPLATE_GOES_TO_PENS) {
     if (homePens + awayPens > 0) return `Shootout underway ${homePens}–${awayPens} ✓`;
-    return 'Waiting for penalty shootout';
+    return `Waiting for penalty shootout · ${score}${clk}`;
   }
-  return 'Tracking condition';
+  return `Tracking · ${score}${clk}`;
 }
