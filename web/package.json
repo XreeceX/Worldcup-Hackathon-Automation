@@ -26,6 +26,10 @@
     "react-hot-toast": "^2.6.0",
     "tweetnacl": "^1.0.3"
   },
+  "overrides": {
+    "@types/react": "^18",
+    "@types/react-dom": "^18"
+  },
   "devDependencies": {
     "@types/bn.js": "^5.2.0",
     "@types/node": "^20",
