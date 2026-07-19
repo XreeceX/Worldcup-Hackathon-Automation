@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* RGB channel triplets so Tailwind opacity modifiers work */
+  --bg: 8 12 9;
+  --surface: 14 20 14;
+  --raised: 20 28 19;
+  --edge: 38 52 34;
+  --ink: 240 247 239;
+  --muted: 140 162 138;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  color: rgb(var(--ink));
+  background-color: rgb(var(--bg));
+  background-image:
+    radial-gradient(ellipse 90% 50% at 15% -10%, rgba(34, 197, 94, 0.14), transparent 55%),
+    radial-gradient(ellipse 70% 40% at 90% 0%, rgba(34, 197, 94, 0.06), transparent 50%),
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      transparent calc(100% - 1px),
+      rgba(34, 197, 94, 0.04) 100%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 79px,
+      rgba(34, 197, 94, 0.03) 79px,
+      rgba(34, 197, 94, 0.03) 80px
+    );
+  background-attachment: fixed;
+  min-height: 100dvh;
+}
+
+::selection {
+  background: rgba(34, 197, 94, 0.35);
+}
+
+@layer components {
+  .app-pad {
+    @apply px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12;
+  }
+
+  .app-main {
+    @apply app-pad py-5 sm:py-6 lg:py-7;
+  }
+
+  .font-display {
+    font-family: var(--font-display), ui-sans-serif, sans-serif;
+  }
+
+  .card {
+    @apply rounded-2xl border border-edge bg-surface/90 shadow-card backdrop-blur-sm;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-primary {
+    @apply btn bg-pitch-500 text-pitch-950 hover:bg-pitch-400;
+  }
+
+  .btn-secondary {
+    @apply btn border border-edge bg-raised text-ink hover:border-pitch-700 hover:bg-raised/80;
+  }
+
+  .btn-danger {
+    @apply btn border border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-edge bg-raised px-3.5 py-2.5 text-sm text-ink placeholder:text-muted/60 focus:border-pitch-600 focus:outline-none focus:ring-1 focus:ring-pitch-600;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted;
+  }
+
+  .panel {
+    @apply rounded-2xl border border-edge bg-surface/70 p-4 shadow-card backdrop-blur-sm sm:p-5;
+  }
+
+  .fade-up {
+    animation: fade-up 0.45s ease-out both;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Wallet adapter modal — high z-index so it isn't trapped under sticky header */
+.wallet-adapter-modal-wrapper {
+  z-index: 10000 !important;
+}
+.wallet-adapter-modal {
+  z-index: 10001 !important;
+}
