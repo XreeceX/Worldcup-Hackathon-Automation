@@ -18,7 +18,10 @@ export default function FixturePage() {
   const [fixture, setFixture] = useState<Fixture | null>(null);
   const [pledges, setPledges] = useState<BoardCommitment[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const live = useLiveScore(Number.isFinite(fixtureId) ? fixtureId : null);
+  const live = useLiveScore(
+    Number.isFinite(fixtureId) ? fixtureId : null,
+    fixture?.kickoffTs,
+  );
 
   useEffect(() => {
     if (!Number.isFinite(fixtureId)) return;

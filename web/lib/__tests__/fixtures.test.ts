@@ -5,6 +5,12 @@ import {
   fixtureBucket,
   mergeFixturesMonotonic,
 } from '../fixtures';
+import {
+  EMPTY_SCORE,
+  formatFifaMinute,
+  parseScoreRecord,
+  scoreIndicatesFinished,
+} from '../matchData';
 import type { Fixture } from '../types';
 
 function fx(
@@ -90,5 +96,41 @@ describe('mergeFixturesMonotonic', () => {
     const merged = mergeFixturesMonotonic(prev, next, now);
     expect(merged[0].status).toBe('finished');
     expect(merged[0].gameState).toBe(100);
+  });
+});
+
+describe('scoreIndicatesFinished / FT clock', () => {
+  it('treats statusId 5 (Ended) as finished', () => {
+    expect(
+      scoreIndicatesFinished({
+        ...EMPTY_SCORE,
+        statusId: 5,
+        period: '5',
+      }),
+    ).toBe(true);
+  });
+
+  it('does not keep a live minute after statusId 5', () => {
+    expect(formatFifaMinute(46 * 60, 5)).toBeNull();
+    const { score } = parseScoreRecord(
+      {
+        statusId: 5,
+        period: 5,
+        Clock: { Seconds: 46 * 60 },
+        Score: { Current: { Home: 1, Away: 2 } },
+      },
+      { ...EMPTY_SCORE, homeGoals: 1, awayGoals: 2, minute: "46'" },
+    );
+    expect(score.finalised).toBe(true);
+    expect(score.minute).toBeNull();
+  });
+
+  it('marks game_finalised as finished without requiring status 100', () => {
+    const { score } = parseScoreRecord(
+      { action: 'game_finalised', statusId: 5 },
+      EMPTY_SCORE,
+    );
+    expect(score.finalised).toBe(true);
+    expect(score.minute).toBeNull();
   });
 });

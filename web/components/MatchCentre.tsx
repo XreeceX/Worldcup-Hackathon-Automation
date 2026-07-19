@@ -11,10 +11,12 @@ import {
   formatDurationMin,
   officialHalfStats,
   periodLabel,
+  scoreIndicatesFinished,
   shortPlayerName,
   totalPlayedTimeLabel,
   type OfficialHalfSlice,
 } from '@/lib/matchData';
+import { isMatchEnded } from '@/lib/fixtures';
 import { coachForTeam } from '@/lib/wcCoaches';
 import type { LineupPlayer, LiveScoreState, MatchEvent, MatchEventKind } from '@/lib/types';
 
@@ -278,7 +280,17 @@ export function MatchCentre({
 }) {
   const [tab, setTab] = useState<Tab>('stats');
   const [filter, setFilter] = useState<'all' | MatchEventKind>('all');
-  const phase = periodLabel(score.period, score.gameState);
+  const finished =
+    scoreIndicatesFinished(score) ||
+    (kickoffTs != null &&
+      Number.isFinite(kickoffTs) &&
+      isMatchEnded(
+        { kickoffTs, gameState: score.statusId ?? 0, status: 'upcoming' },
+        { finalised: score.finalised, statusId: score.statusId },
+      ));
+  const phase = finished
+    ? 'Full time'
+    : periodLabel(score.period, score.gameState);
   const kickoffLabel =
     kickoffTs && Number.isFinite(kickoffTs)
       ? new Date(kickoffTs).toLocaleString(undefined, {
@@ -289,7 +301,7 @@ export function MatchCentre({
           minute: '2-digit',
         })
       : null;
-  const statusLine = score.finalised
+  const statusLine = finished
     ? 'Full time'
     : score.statusId && score.statusId > 1
       ? 'Live now'
@@ -338,7 +350,7 @@ export function MatchCentre({
           <>
             <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted">
               {statusLine}
-              {score.minute && !score.finalised ? ` · ${score.minute}` : ''}
+              {!finished && score.minute ? ` · ${score.minute}` : ''}
             </p>
             <div className="flex items-center justify-center gap-3 sm:gap-5">
               <div className="min-w-0 flex-1">
@@ -355,7 +367,7 @@ export function MatchCentre({
             </div>
             <p className="mt-2 text-xs text-muted">
               {phase}
-              {score.finalised
+              {finished
                 ? score.addedTimeH2 != null
                   ? ` · 90+${score.addedTimeH2} played`
                   : ''
@@ -410,18 +422,18 @@ export function MatchCentre({
                 }
               />
               <ScorePhaseCard
-                title={score.finalised ? 'Full time' : 'Current score'}
+                title={finished ? 'Full time' : 'Current score'}
                 homeGoals={score.homeGoals}
                 awayGoals={score.awayGoals}
                 homeTeam={homeTeam}
                 awayTeam={awayTeam}
-                added={score.finalised ? score.addedTimeH2 : score.addedTime}
+                added={finished ? score.addedTimeH2 : score.addedTime}
                 hint={
-                  score.finalised
+                  finished
                     ? 'After 90′ + 2nd-half stoppage'
                     : 'Live · stoppage still to come'
                 }
-                emphasize={score.finalised}
+                emphasize={finished}
               />
             </div>
 
@@ -489,12 +501,6 @@ export function MatchCentre({
           </button>
         ))}
         {(() => {
-          const finished =
-            score.finalised ||
-            score.statusId === 5 ||
-            score.statusId === 10 ||
-            score.statusId === 13 ||
-            score.statusId === 100;
           const notStarted =
             !finished && (score.statusId == null || score.statusId <= 1 || !hasData);
           const inPlay = !finished && !notStarted;

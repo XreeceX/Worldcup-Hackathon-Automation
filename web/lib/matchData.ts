@@ -134,18 +134,68 @@ function str(v: unknown): string | null {
  * 1st half: 1'–45', then 45+1'… in stoppage.
  * 2nd half: 46'–90', then 90+1'… in stoppage.
  */
+/** TxLINE / packed fixture terminal states (FT, ET done, pens done, abandoned…). */
+export const FINISHED_STATUS_IDS = new Set([5, 10, 13, 15, 16, 100]);
+
+export function isTerminalStatusId(statusId: number | null | undefined): boolean {
+  return statusId != null && FINISHED_STATUS_IDS.has(Number(statusId));
+}
+
+/** True when score feed already says the match is over (not just kickoff-time estimate). */
+export function scoreIndicatesFinished(
+  score: Pick<LiveScoreState, 'finalised' | 'statusId' | 'period' | 'gameState'>,
+): boolean {
+  if (score.finalised) return true;
+  if (isTerminalStatusId(score.statusId)) return true;
+  const periodNum = score.period != null ? Number(score.period) : NaN;
+  if (Number.isFinite(periodNum) && FINISHED_STATUS_IDS.has(periodNum)) return true;
+  const gs = (score.gameState ?? '').toLowerCase().replace(/_/g, ' ');
+  if (
+    gs.includes('full time') ||
+    gs === 'ft' ||
+    gs === 'ended' ||
+    gs === 'finished' ||
+    gs.includes('game finalised')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function detectFinalised(
+  action: string | null,
+  statusId: number | null,
+  period: string | null,
+  gameState: string | null,
+): boolean {
+  if (action === 'game_finalised') return true;
+  if (isTerminalStatusId(statusId)) return true;
+  if (period != null && FINISHED_STATUS_IDS.has(Number(period))) return true;
+  const gs = (gameState ?? '').toLowerCase().replace(/_/g, ' ');
+  if (
+    gs.includes('full time') ||
+    gs === 'ft' ||
+    gs === 'ended' ||
+    gs === 'finished' ||
+    gs.includes('game finalised')
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function formatFifaMinute(
   seconds: number | null,
   statusId: number | null,
   _kind?: MatchEventKind | null,
   action?: string | null,
 ): string | null {
-  if (action === 'game_finalised') return 'FT';
+  if (action === 'game_finalised' || isTerminalStatusId(statusId)) return null;
   if (action === 'halftime_finalised' || action === 'halftime') return 'HT';
   if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
   const mins = Math.floor(seconds / 60);
   const inFirstHalf = statusId === 2 || statusId === 3;
-  const inSecondHalf = statusId === 4 || statusId === 5 || statusId === 100;
+  const inSecondHalf = statusId === 4;
 
   if (inFirstHalf || (!inSecondHalf && mins <= 45)) {
     if (mins < 45) return `${Math.max(1, mins)}'`;
@@ -1034,8 +1084,7 @@ export function parseScoreRecord(
       : null;
   const gameState = str(d.gameState ?? d.GameState);
   const statusId = num(d.statusId ?? d.StatusId);
-  const finalised =
-    (action === 'game_finalised' && statusId === 100) || statusId === 100 || period === '100';
+  const finalised = detectFinalised(action, statusId, period, gameState);
 
   const data = (d.Data ?? d.data ?? {}) as Record<string, unknown>;
   let addedTime = prev.addedTime;
@@ -1092,7 +1141,9 @@ export function parseScoreRecord(
   };
 
   const minute =
-    formatFifaMinute(clockSeconds, statusId ?? prev.statusId) ?? prev.minute;
+    prev.finalised || finalised
+      ? null
+      : formatFifaMinute(clockSeconds, statusId ?? prev.statusId) ?? prev.minute;
 
   let venue = prev.venue;
   let weather = prev.weather;
@@ -1546,6 +1597,10 @@ export function buildMatchFromRecords(records: Record<string, unknown>[]): {
     ...score,
     lineups: enrichLineupsWithMatchData(mergedLineups, cleaned, score.players),
   };
+
+  if (scoreIndicatesFinished(score) && (!score.finalised || score.minute != null)) {
+    score = { ...score, finalised: true, minute: null };
+  }
 
   const hasData =
     (score.statusId != null && score.statusId > 1) ||

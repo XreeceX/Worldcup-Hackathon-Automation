@@ -35,7 +35,12 @@ export default function BoardPage() {
   const [status, setStatus] = useState<BoardStatusFilter>('Active');
   const [sort, setSort] = useState<SortKey>('total_lamports');
 
-  const live = useLiveScore(fixtureId);
+  const selectedKickoff = useMemo(() => {
+    if (fixtureId == null) return null;
+    return fixtures.find((f) => f.fixtureId === fixtureId)?.kickoffTs ?? null;
+  }, [fixtures, fixtureId]);
+
+  const live = useLiveScore(fixtureId, selectedKickoff);
 
   const load = useCallback(async (isLatest: () => boolean) => {
     const [boardRes, fixturesRes] = await Promise.allSettled([

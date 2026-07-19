@@ -122,7 +122,7 @@ export default function CommitmentPage() {
 
   const home = fixture?.homeTeam ?? indexed?.homeTeam;
   const away = fixture?.awayTeam ?? indexed?.awayTeam;
-  const live = useLiveScore(onChain?.fixtureId ?? null);
+  const live = useLiveScore(onChain?.fixtureId ?? null, fixture?.kickoffTs);
 
   const label = useMemo(
     () =>

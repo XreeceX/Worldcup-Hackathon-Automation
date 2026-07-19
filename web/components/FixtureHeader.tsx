@@ -7,7 +7,7 @@ import {
   isPledgeResultsPending,
 } from '@/lib/fixtures';
 import { formatKickoff, formatSol } from '@/lib/format';
-import { periodLabel } from '@/lib/matchData';
+import { periodLabel, scoreIndicatesFinished } from '@/lib/matchData';
 import { enrichFixtureMeta } from '@/lib/wcSchedule';
 import type { BoardCommitment, Fixture, LiveScoreState } from '@/lib/types';
 
@@ -32,10 +32,12 @@ export function FixtureHeader({
     .join(' · ');
 
   const scoreOpts = {
-    finalised: score?.finalised,
+    finalised: score?.finalised || (score ? scoreIndicatesFinished(score) : false),
     statusId: score?.statusId,
   };
-  const ended = isMatchEnded(fixture, scoreOpts, now);
+  const ended =
+    isMatchEnded(fixture, scoreOpts, now) ||
+    (score ? scoreIndicatesFinished(score) : false);
   const resultsPending = isPledgeResultsPending(fixture, scoreOpts, now);
 
   const pledgeStats = pledges
@@ -72,7 +74,7 @@ export function FixtureHeader({
             </span>
             <span
               className={`font-mono ${
-                showScore && score!.finalised ? 'text-ink' : 'text-pitch-400'
+                showScore && ended ? 'text-ink' : 'text-pitch-400'
               }`}
             >
               {showScore ? `${score!.homeGoals}–${score!.awayGoals}` : 'vs'}
@@ -82,13 +84,13 @@ export function FixtureHeader({
               {fixture.awayTeam}
             </span>
           </h1>
-          {showScore && !score!.finalised && now >= fixture.kickoffTs && (
+          {showScore && !ended && now >= fixture.kickoffTs && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-pitch-600/40 bg-pitch-500/15 px-3 py-1 text-xs font-bold text-pitch-400">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-pitch-400" />
-              LIVE{score!.minute ? ` ${score!.minute}'` : ''}
+              LIVE{score!.minute ? ` ${score!.minute.replace(/'$/, '')}'` : ''}
             </span>
           )}
-          {showScore && score!.finalised && (
+          {showScore && ended && (
             <span className="rounded-full border border-edge bg-raised px-3 py-1 text-xs font-bold text-muted">
               Full time
             </span>

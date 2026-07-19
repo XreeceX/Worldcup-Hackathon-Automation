@@ -5,6 +5,7 @@ import { CountryFlag } from '@/components/CountryFlag';
 import { useLiveScore } from '@/hooks/useLiveScore';
 import { conditionStatusText, evaluateCondition } from '@/lib/conditions';
 import { isPledgeResultsPending } from '@/lib/fixtures';
+import { scoreIndicatesFinished } from '@/lib/matchData';
 import type { CommitmentStatus } from '@/lib/types';
 
 /**
@@ -34,7 +35,7 @@ export function InPlayCard({
   competition?: string | null;
   kickoffTs?: number | null;
 }) {
-  const { score, events, state, hasData } = useLiveScore(fixtureId);
+  const { score, events, state, hasData } = useLiveScore(fixtureId, kickoffTs);
   const home = homeTeam ?? 'Home';
   const away = awayTeam ?? 'Away';
 
@@ -59,18 +60,13 @@ export function InPlayCard({
           ? 'Void — deposits are reclaimable'
           : 'Resolved on-chain';
 
-  const finished =
-    score.finalised ||
-    score.statusId === 5 ||
-    score.statusId === 10 ||
-    score.statusId === 13 ||
-    score.statusId === 100;
+  const finished = scoreIndicatesFinished(score);
   const resultsPending =
     !resolvedOnChain &&
     kickoffTs != null &&
     isPledgeResultsPending(
       { kickoffTs, gameState: score.statusId ?? 0, status: finished ? 'finished' : undefined },
-      { finalised: score.finalised, statusId: score.statusId },
+      { finalised: finished, statusId: score.statusId },
     );
   const notStarted =
     !finished && (score.statusId == null || score.statusId <= 1 || !hasData);
