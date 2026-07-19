@@ -15,6 +15,8 @@ export const MIN_DEPOSIT_SOL = 0.01;
 export const MIN_DEPOSIT_LAMPORTS = 10_000_000;
 export const MAX_NAME_BYTES = 64;
 export const TIMEOUT_SECONDS = 7 * 86_400;
+/** Create/join allowed through kickoff + this window (mirrors on-chain). */
+export const MATCH_WINDOW_SECONDS = 3.5 * 60 * 60;
 
 export function explorerTxUrl(sig: string): string {
   return `https://explorer.solana.com/tx/${sig}?cluster=devnet`;

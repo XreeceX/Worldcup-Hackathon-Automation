@@ -23,7 +23,7 @@ export function EmptyState({
 
 export function LoadingGrid({ count = 6 }: { count?: number }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="card h-48 animate-pulse bg-raised/50" />
       ))}

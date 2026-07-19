@@ -19,6 +19,8 @@ pub const MAX_MEMBERS: u32 = 500;
 /// Member slots pre-allocated at creation; join reallocs beyond this.
 pub const INITIAL_MEMBER_CAPACITY: usize = 25;
 pub const TIMEOUT_SECONDS: i64 = 7 * 86_400;
+/// Create/join allowed through kickoff + this window (covers live play / ET).
+pub const MATCH_WINDOW_SECONDS: i64 = (3 * 3600) + 1800; // 3.5 hours
 /// TxLINE marks a fully finalised score record with period == 100.
 pub const FINAL_PERIOD: i32 = 100;
 /// gameState occupies the top 16 bits of a packed fixture id. 16 = Cancelled.
@@ -42,6 +44,7 @@ pub mod commitment {
     pub fn create_commitment(
         ctx: Context<CreateCommitment>,
         fixture_id: u64,
+        nonce: u64,
         kickoff_ts: i64,
         condition_template: u8,
         condition_param: u64,
@@ -49,13 +52,17 @@ pub mod commitment {
         deposit_lamports: u64,
         name: [u8; 64],
     ) -> Result<()> {
-        require!(condition_template <= 1, EngineError::ConditionTemplateInvalid);
-        if condition_template == 1 {
-            require!(condition_param <= 1, EngineError::ConditionParamInvalid);
-        }
+        require!(condition_template <= 7, EngineError::ConditionTemplateInvalid);
+        validate_condition_param(condition_template, condition_param)?;
         let now = Clock::get()?.unix_timestamp;
-        require!(kickoff_ts > now, EngineError::KickoffInPast);
+        // Allow create while upcoming or in-play; block after the match window.
+        require!(
+            now < kickoff_ts + MATCH_WINDOW_SECONDS,
+            EngineError::MatchWindowClosed
+        );
         require!(deposit_lamports >= MIN_DEPOSIT_LAMPORTS, EngineError::DepositTooSmall);
+        // nonce is part of the PDA seeds (multiple pledges per wallet/fixture).
+        let _ = nonce;
 
         let c = &mut ctx.accounts.commitment;
         c.fixture_id = fixture_id;
@@ -103,7 +110,10 @@ pub mod commitment {
         {
             let c = &ctx.accounts.commitment;
             require!(c.status == CommitmentStatus::Open, EngineError::NotOpen);
-            require!(now < c.kickoff_ts, EngineError::KickoffPassed);
+            require!(
+                now < c.kickoff_ts + MATCH_WINDOW_SECONDS,
+                EngineError::MatchWindowClosed
+            );
             require!(c.member_count < MAX_MEMBERS, EngineError::MemberLimitReached);
             require!(deposit_lamports >= MIN_DEPOSIT_LAMPORTS, EngineError::DepositTooSmall);
             let signer = ctx.accounts.member.key();
@@ -204,7 +214,7 @@ pub mod commitment {
 
     /// Permissionless. Builds the strategy ON-CHAIN from the stored condition —
     /// the resolver supplies only the Merkle proof package. The proof is pinned
-    /// to the commitment's fixture, to stat keys [1, 2] in order, and to a
+    /// to the commitment's fixture, to the template's stat keys in order, and to a
     /// finalised (period == 100) record, so no caller can steer the outcome.
     pub fn resolve(ctx: Context<Resolve>, proof: StatValidationInput) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
@@ -220,8 +230,9 @@ pub mod commitment {
                 EngineError::FixtureMismatch
             );
             require!(proof.stats.len() == 2, EngineError::BadStatKeys);
+            let (key_a, key_b) = expected_stat_keys(c.condition_template);
             require!(
-                proof.stats[0].stat.key == 1 && proof.stats[1].stat.key == 2,
+                proof.stats[0].stat.key == key_a && proof.stats[1].stat.key == key_b,
                 EngineError::BadStatKeys
             );
             require!(
@@ -398,6 +409,51 @@ pub mod commitment {
     }
 }
 
+/// Unpack `team * 256 + n` used by TeamScoresAtLeast / WinsByAtLeast.
+fn unpack_team_threshold(param: u64) -> (u8, u64) {
+    let team = (param / 256) as u8;
+    let n = param % 256;
+    (team, n)
+}
+
+fn validate_condition_param(template: u8, param: u64) -> Result<()> {
+    match template {
+        0 | 2 | 7 => Ok(()), // BTTS / Draw / GoesToPens — param ignored
+        1 | 6 => {
+            require!(param <= 1, EngineError::ConditionParamInvalid);
+            Ok(())
+        }
+        3 => {
+            // Team scores ≥ N: team ∈ {0,1}, N ∈ 1..=8
+            let (team, n) = unpack_team_threshold(param);
+            require!(team <= 1, EngineError::ConditionParamInvalid);
+            require!((1..=8).contains(&n), EngineError::ConditionParamInvalid);
+            Ok(())
+        }
+        4 => {
+            // Total goals ≥ N: N ∈ 1..=10
+            require!((1..=10).contains(&param), EngineError::ConditionParamInvalid);
+            Ok(())
+        }
+        5 => {
+            // Wins by ≥ N: team ∈ {0,1}, margin ∈ 1..=5
+            let (team, n) = unpack_team_threshold(param);
+            require!(team <= 1, EngineError::ConditionParamInvalid);
+            require!((1..=5).contains(&n), EngineError::ConditionParamInvalid);
+            Ok(())
+        }
+        _ => err!(EngineError::ConditionTemplateInvalid),
+    }
+}
+
+/// Stat keys proven at resolve: goals [1,2] or shootout [6001,6002].
+fn expected_stat_keys(template: u8) -> (u32, u32) {
+    match template {
+        6 | 7 => (6001, 6002),
+        _ => (1, 2),
+    }
+}
+
 /// Strategy templates, reconstructed on-chain — never taken from the caller.
 fn built_in_strategy(template: u8, param: u64) -> NDimensionalStrategy {
     match template {
@@ -408,15 +464,135 @@ fn built_in_strategy(template: u8, param: u64) -> NDimensionalStrategy {
             discrete_predicates: vec![
                 StatPredicate::Single {
                     index: 0,
-                    predicate: TraderPredicate { threshold: 0, comparison: Comparison::GreaterThan },
+                    predicate: TraderPredicate {
+                        threshold: 0,
+                        comparison: Comparison::GreaterThan,
+                    },
                 },
                 StatPredicate::Single {
                     index: 1,
-                    predicate: TraderPredicate { threshold: 0, comparison: Comparison::GreaterThan },
+                    predicate: TraderPredicate {
+                        threshold: 0,
+                        comparison: Comparison::GreaterThan,
+                    },
                 },
             ],
         },
-        // TeamWins: (winner goals − loser goals) > 0; param 0 = home (P1), 1 = away (P2)
+        // TeamWins: (winner − loser) > 0; param 0 = home, 1 = away
+        1 => {
+            let (a, b) = if param == 0 { (0u8, 1u8) } else { (1u8, 0u8) };
+            NDimensionalStrategy {
+                geometric_targets: vec![],
+                distance_predicate: None,
+                discrete_predicates: vec![StatPredicate::Binary {
+                    index_a: a,
+                    index_b: b,
+                    op: BinaryExpression::Subtract,
+                    predicate: TraderPredicate {
+                        threshold: 0,
+                        comparison: Comparison::GreaterThan,
+                    },
+                }],
+            }
+        }
+        // Draw: P1 − P2 == 0
+        2 => NDimensionalStrategy {
+            geometric_targets: vec![],
+            distance_predicate: None,
+            discrete_predicates: vec![StatPredicate::Binary {
+                index_a: 0,
+                index_b: 1,
+                op: BinaryExpression::Subtract,
+                predicate: TraderPredicate {
+                    threshold: 0,
+                    comparison: Comparison::EqualTo,
+                },
+            }],
+        },
+        // Team scores ≥ N: that side's goals > N−1
+        3 => {
+            let (team, n) = unpack_team_threshold(param);
+            let threshold = (n as i32) - 1;
+            NDimensionalStrategy {
+                geometric_targets: vec![],
+                distance_predicate: None,
+                discrete_predicates: vec![StatPredicate::Single {
+                    index: team,
+                    predicate: TraderPredicate {
+                        threshold,
+                        comparison: Comparison::GreaterThan,
+                    },
+                }],
+            }
+        }
+        // Total goals ≥ N: P1 + P2 > N−1
+        4 => {
+            let threshold = (param as i32) - 1;
+            NDimensionalStrategy {
+                geometric_targets: vec![],
+                distance_predicate: None,
+                discrete_predicates: vec![StatPredicate::Binary {
+                    index_a: 0,
+                    index_b: 1,
+                    op: BinaryExpression::Add,
+                    predicate: TraderPredicate {
+                        threshold,
+                        comparison: Comparison::GreaterThan,
+                    },
+                }],
+            }
+        }
+        // Wins by ≥ N: (winner − loser) > N−1
+        5 => {
+            let (team, n) = unpack_team_threshold(param);
+            let (a, b) = if team == 0 { (0u8, 1u8) } else { (1u8, 0u8) };
+            let threshold = (n as i32) - 1;
+            NDimensionalStrategy {
+                geometric_targets: vec![],
+                distance_predicate: None,
+                discrete_predicates: vec![StatPredicate::Binary {
+                    index_a: a,
+                    index_b: b,
+                    op: BinaryExpression::Subtract,
+                    predicate: TraderPredicate {
+                        threshold,
+                        comparison: Comparison::GreaterThan,
+                    },
+                }],
+            }
+        }
+        // Wins on penalties: shootout goals (6001/6002) winner − loser > 0
+        6 => {
+            let (a, b) = if param == 0 { (0u8, 1u8) } else { (1u8, 0u8) };
+            NDimensionalStrategy {
+                geometric_targets: vec![],
+                distance_predicate: None,
+                discrete_predicates: vec![StatPredicate::Binary {
+                    index_a: a,
+                    index_b: b,
+                    op: BinaryExpression::Subtract,
+                    predicate: TraderPredicate {
+                        threshold: 0,
+                        comparison: Comparison::GreaterThan,
+                    },
+                }],
+            }
+        }
+        // Goes to penalties: at least one shootout goal recorded (6001+6002 > 0)
+        7 => NDimensionalStrategy {
+            geometric_targets: vec![],
+            distance_predicate: None,
+            discrete_predicates: vec![StatPredicate::Binary {
+                index_a: 0,
+                index_b: 1,
+                op: BinaryExpression::Add,
+                predicate: TraderPredicate {
+                    threshold: 0,
+                    comparison: Comparison::GreaterThan,
+                },
+            }],
+        },
+        // Unreachable when create validates template ≤ 7
         _ => {
             let (a, b) = if param == 0 { (0u8, 1u8) } else { (1u8, 0u8) };
             NDimensionalStrategy {
@@ -426,7 +602,10 @@ fn built_in_strategy(template: u8, param: u64) -> NDimensionalStrategy {
                     index_a: a,
                     index_b: b,
                     op: BinaryExpression::Subtract,
-                    predicate: TraderPredicate { threshold: 0, comparison: Comparison::GreaterThan },
+                    predicate: TraderPredicate {
+                        threshold: 0,
+                        comparison: Comparison::GreaterThan,
+                    },
                 }],
             }
         }
@@ -513,7 +692,7 @@ pub enum VoidReason {
 // ---------- instruction contexts ----------
 
 #[derive(Accounts)]
-#[instruction(fixture_id: u64)]
+#[instruction(fixture_id: u64, nonce: u64)]
 pub struct CreateCommitment<'info> {
     #[account(mut)]
     pub founder: Signer<'info>,
@@ -521,7 +700,12 @@ pub struct CreateCommitment<'info> {
         init,
         payer = founder,
         space = space_for(INITIAL_MEMBER_CAPACITY),
-        seeds = [b"commitment", fixture_id.to_le_bytes().as_ref(), founder.key().as_ref()],
+        seeds = [
+            b"commitment",
+            fixture_id.to_le_bytes().as_ref(),
+            founder.key().as_ref(),
+            nonce.to_le_bytes().as_ref(),
+        ],
         bump
     )]
     pub commitment: Account<'info, Commitment>,
@@ -663,6 +847,8 @@ pub enum EngineError {
     ConditionParamInvalid,
     #[msg("Kickoff timestamp is in the past")]
     KickoffInPast,
+    #[msg("Match window closed — pledging only while upcoming or live")]
+    MatchWindowClosed,
     #[msg("Deposit below 0.01 SOL minimum")]
     DepositTooSmall,
     #[msg("Commitment is not open")]

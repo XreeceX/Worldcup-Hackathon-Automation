@@ -19,9 +19,9 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { useFeed } from '@/hooks/useFeed';
 import { fetchCommitment, fetchFixtures } from '@/lib/api';
 import { conditionLabel } from '@/lib/conditions';
-import { explorerAddressUrl, explorerTxUrl } from '@/lib/config';
+import { explorerTxUrl } from '@/lib/config';
 import { fetchOnChainCommitment, type OnChainCommitment } from '@/lib/escrow';
-import { formatKickoff, formatSol, truncateAddress } from '@/lib/format';
+import { formatKickoff } from '@/lib/format';
 import type { BoardCommitment, Fixture } from '@/lib/types';
 
 export default function CommitmentPage() {
@@ -131,11 +131,7 @@ export default function CommitmentPage() {
   const nowSec = Date.now() / 1000;
   const matchStarted = nowSec >= onChain.kickoffTs;
   const resolvedOnChain = onChain.status !== 'Open' || feedResolved;
-  const totalLamports = onChain.members
-    .filter((m) => !m.withdrawn)
-    .reduce((sum, m) => sum + m.depositLamports, 0);
   const settlementTx = indexed?.settlementTx ?? null;
-  const isGroup = onChain.members.length > 1;
 
   return (
     <div>
@@ -182,7 +178,7 @@ export default function CommitmentPage() {
         )}
       </section>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[1fr_22rem]">
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)]">
         <div className="flex flex-col gap-6">
           {matchStarted && (
             <InPlayCard
@@ -193,6 +189,8 @@ export default function CommitmentPage() {
               awayTeam={away}
               status={onChain.status}
               resolvedOnChain={resolvedOnChain}
+              competition={fixture?.competition}
+              kickoffTs={fixture?.kickoffTs ?? onChain.kickoffTs * 1000}
             />
           )}
 
@@ -200,65 +198,6 @@ export default function CommitmentPage() {
         </div>
 
         <div className="flex flex-col gap-6">
-          {/* CommitmentMeta */}
-          <section className="card p-5">
-            <h2 className="mb-3 text-xs font-black uppercase tracking-wider">Details</h2>
-            <dl className="flex flex-col gap-3 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted">Total pledged</dt>
-                <dd className="font-mono font-black tabular-nums">
-                  {formatSol(totalLamports)} SOL
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted">Members</dt>
-                <dd className="font-bold">
-                  {onChain.memberCount}
-                  {!isGroup && <span className="ml-1 text-xs text-muted">(individual)</span>}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted">Beneficiary</dt>
-                <dd>
-                  <a
-                    href={explorerAddressUrl(onChain.beneficiary)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-mono text-xs font-bold hover:underline"
-                  >
-                    {truncateAddress(onChain.beneficiary, 6)}
-                  </a>
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted">Founder</dt>
-                <dd>
-                  <a
-                    href={explorerAddressUrl(onChain.founder)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-mono text-xs font-bold hover:underline"
-                  >
-                    {truncateAddress(onChain.founder, 6)}
-                  </a>
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-muted">Commitment</dt>
-                <dd>
-                  <a
-                    href={explorerAddressUrl(onChain.pubkey)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-mono text-xs font-bold hover:underline"
-                  >
-                    {truncateAddress(onChain.pubkey, 6)}
-                  </a>
-                </dd>
-              </div>
-            </dl>
-          </section>
-
           {/* Actions */}
           <section className="card flex flex-col gap-4 p-5">
             <h2 className="text-xs font-black uppercase tracking-wider">Actions</h2>
@@ -267,11 +206,11 @@ export default function CommitmentPage() {
             <ResolveButton commitment={onChain} onChanged={refresh} />
             <VoidButton commitment={onChain} onChanged={refresh} />
             <ClaimRefundButton commitment={onChain} onChanged={refresh} />
-            {onChain.status === 'Open' && !matchStarted && (
+            {onChain.status === 'Open' && (
               <p className="text-xs text-muted">
-                Joining and withdrawing lock automatically at kickoff. After full
-                time, the keeper resolves this commitment with TxLINE&apos;s
-                on-chain match proof.
+                {matchStarted
+                  ? 'You can still join while the match is live. Withdrawals lock at kickoff. After full time, the keeper resolves with TxLINE’s on-chain match proof.'
+                  : 'Join anytime before or during the match. Withdrawals lock at kickoff. After full time, the keeper resolves with TxLINE’s on-chain match proof.'}
               </p>
             )}
             {(onChain.status === 'Executed' || onChain.status === 'Closed') && (

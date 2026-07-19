@@ -25,6 +25,24 @@ when the indexer/keeper are down ("Data may be delayed" banner, reconnecting
 SSE states). Write actions (create / join / withdraw / claim / void) need a
 devnet wallet.
 
+## Deploy (Vercel)
+
+1. Import the GitHub repo on [vercel.com](https://vercel.com).
+2. Set **Root Directory** to `web` (critical — monorepo).
+3. Add Environment Variables (Production):
+
+| Name | Value |
+|---|---|
+| `NEXT_PUBLIC_RPC_URL` | `https://api.devnet.solana.com` |
+| `NEXT_PUBLIC_PROGRAM_ID` | `3uyiF93zMvUcP2o1Cqnt2iS4bXwYeBcTMTvbaTf5B3RJ` |
+| `NEXT_PUBLIC_INDEXER_URL` | your public indexer HTTPS URL (no trailing slash) |
+| `NEXT_PUBLIC_KEEPER_URL` | your public keeper HTTPS URL (no trailing slash) |
+
+4. Deploy. On keeper + indexer, set `CORS_ORIGIN` to include the Vercel URL  
+   (e.g. `https://your-app.vercel.app` or `*` for the hackathon).
+
+Until indexer/keeper are hosted, the site still loads; board/live data show degraded/empty states.
+
 ## Environment (`NEXT_PUBLIC_*`)
 
 | Variable | Default | Purpose |

@@ -5,14 +5,17 @@ import { useFeed } from '@/hooks/useFeed';
 import { explorerTxUrl } from '@/lib/config';
 import { formatSol, truncateAddress } from '@/lib/format';
 
-/** SSE-backed live settlement feed panel (FR-10, keeper /api/feed). */
+/** Compact SSE settlement strip — sits under the board, not a tall empty sidebar. */
 export function LiveFeed() {
   const { events, state } = useFeed();
+  const recent = events.slice(0, 6);
 
   return (
-    <aside className="card flex h-fit flex-col p-5 lg:sticky lg:top-24">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-black uppercase tracking-wider">Live settlements</h2>
+    <section className="panel mt-8">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-base font-extrabold uppercase tracking-wide">
+          Live settlements
+        </h2>
         <span
           className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${
             state === 'open' ? 'text-pitch-400' : 'text-amber-400'
@@ -23,46 +26,48 @@ export function LiveFeed() {
               state === 'open' ? 'bg-pitch-400' : 'animate-pulse bg-amber-400'
             }`}
           />
-          {state === 'open' ? 'LIVE' : 'Reconnecting…'}
+          {state === 'open' ? 'Connected' : 'Reconnecting…'}
         </span>
       </div>
 
-      {events.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">
-          No settlements yet. Resolutions land here in real time when matches
-          finalise.
+      {recent.length === 0 ? (
+        <p className="text-sm text-muted">
+          Settlements appear here when pledges resolve after full time.
         </p>
       ) : (
-        <ul className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto">
-          {events.map((ev, i) => {
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {recent.map((ev, i) => {
             const c = ev.commitment;
-            const isGroup = (c?.memberCount ?? 1) > 1;
             const met = ev.conditionMet;
             return (
               <li
                 key={`${ev.receivedAt}-${i}`}
-                className="rounded-xl border border-edge bg-raised/60 p-3 text-xs"
+                className="rounded-xl border border-edge bg-raised/50 px-3 py-2.5 text-xs"
               >
                 <p className="font-bold">
                   {met === true && (
                     <span className="text-pitch-400">
-                      {c?.totalLamports != null ? `${formatSol(c.totalLamports)} SOL → ` : 'Paid → '}
-                      {c?.beneficiary ? truncateAddress(c.beneficiary) : 'beneficiary'} ✓
+                      Paid{' '}
+                      {c?.totalLamports != null
+                        ? `${formatSol(c.totalLamports)} SOL`
+                        : ''}
                     </span>
                   )}
                   {met === false && (
-                    <span className="text-amber-400">Pledge not met ✗ — refunds open</span>
+                    <span className="text-rose-300">Not met · refunds open</span>
                   )}
                   {met == null && <span className="text-muted">{ev.type}</span>}
                 </p>
-                <p className="mt-1 text-muted">
-                  {c?.name ? `${c.name} · ` : ''}
-                  {c?.conditionLabel ?? ''}
-                  {isGroup && c?.memberCount ? ` · ${c.memberCount} members` : ''}
+                <p className="mt-0.5 truncate text-muted">
+                  {c?.name || c?.conditionLabel || 'Commitment'}
+                  {c?.beneficiary ? ` · ${truncateAddress(c.beneficiary, 4)}` : ''}
                 </p>
                 <div className="mt-1.5 flex gap-3">
                   {c?.pubkey && (
-                    <Link href={`/commitment/${c.pubkey}`} className="font-semibold text-pitch-400 hover:underline">
+                    <Link
+                      href={`/commitment/${c.pubkey}`}
+                      className="font-semibold text-pitch-400 hover:underline"
+                    >
                       View
                     </Link>
                   )}
@@ -71,9 +76,9 @@ export function LiveFeed() {
                       href={explorerTxUrl(ev.txSig)}
                       target="_blank"
                       rel="noreferrer"
-                      className="font-semibold text-muted hover:text-ink hover:underline"
+                      className="font-semibold text-muted hover:text-ink"
                     >
-                      Explorer ↗
+                      Explorer
                     </a>
                   )}
                 </div>
@@ -82,6 +87,6 @@ export function LiveFeed() {
           })}
         </ul>
       )}
-    </aside>
+    </section>
   );
 }

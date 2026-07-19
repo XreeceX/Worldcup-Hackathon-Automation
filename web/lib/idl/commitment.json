@@ -103,6 +103,10 @@
               {
                 "kind": "account",
                 "path": "founder"
+              },
+              {
+                "kind": "arg",
+                "path": "nonce"
               }
             ]
           }
@@ -137,6 +141,10 @@
       "args": [
         {
           "name": "fixture_id",
+          "type": "u64"
+        },
+        {
+          "name": "nonce",
           "type": "u64"
         },
         {
@@ -231,7 +239,7 @@
       "docs": [
         "Permissionless. Builds the strategy ON-CHAIN from the stored condition —",
         "the resolver supplies only the Merkle proof package. The proof is pinned",
-        "to the commitment's fixture, to stat keys [1, 2] in order, and to a",
+        "to the commitment's fixture, to the template's stat keys in order, and to a",
         "finalised (period == 100) record, so no caller can steer the outcome."
       ],
       "discriminator": [
@@ -577,13 +585,118 @@
   "errors": [
     {
       "code": 6000,
-      "name": "NoReturnData",
-      "msg": "txoracle CPI returned no data"
+      "name": "ConditionTemplateInvalid",
+      "msg": "Unknown condition template"
     },
     {
       "code": 6001,
-      "name": "WrongReturnProgram",
-      "msg": "return data came from unexpected program"
+      "name": "ConditionParamInvalid",
+      "msg": "Invalid condition parameter"
+    },
+    {
+      "code": 6002,
+      "name": "KickoffInPast",
+      "msg": "Kickoff timestamp is in the past"
+    },
+    {
+      "code": 6003,
+      "name": "MatchWindowClosed",
+      "msg": "Match window closed — pledging only while upcoming or live"
+    },
+    {
+      "code": 6004,
+      "name": "DepositTooSmall",
+      "msg": "Deposit below 0.01 SOL minimum"
+    },
+    {
+      "code": 6005,
+      "name": "NotOpen",
+      "msg": "Commitment is not open"
+    },
+    {
+      "code": 6006,
+      "name": "KickoffPassed",
+      "msg": "Kickoff has passed — membership is locked"
+    },
+    {
+      "code": 6007,
+      "name": "MemberLimitReached",
+      "msg": "Member limit (500) reached"
+    },
+    {
+      "code": 6008,
+      "name": "AlreadyMember",
+      "msg": "Wallet already joined this commitment"
+    },
+    {
+      "code": 6009,
+      "name": "MemberNotFound",
+      "msg": "Wallet is not a member"
+    },
+    {
+      "code": 6010,
+      "name": "AlreadyWithdrawn",
+      "msg": "Deposit already withdrawn"
+    },
+    {
+      "code": 6011,
+      "name": "AlreadyClaimed",
+      "msg": "Refund already claimed"
+    },
+    {
+      "code": 6012,
+      "name": "NotRefundable",
+      "msg": "Commitment is not refundable"
+    },
+    {
+      "code": 6013,
+      "name": "MatchNotStarted",
+      "msg": "Match has not started yet"
+    },
+    {
+      "code": 6014,
+      "name": "FixtureMismatch",
+      "msg": "Proof is for a different fixture"
+    },
+    {
+      "code": 6015,
+      "name": "BadStatKeys",
+      "msg": "Proof must cover stat keys [1, 2] in order"
+    },
+    {
+      "code": 6016,
+      "name": "ProofNotFinal",
+      "msg": "Proof is not from a finalised score record"
+    },
+    {
+      "code": 6017,
+      "name": "WrongRootsAccount",
+      "msg": "Wrong Merkle roots account for this proof"
+    },
+    {
+      "code": 6018,
+      "name": "WrongBeneficiary",
+      "msg": "Beneficiary account does not match commitment"
+    },
+    {
+      "code": 6019,
+      "name": "WrongOracleProgram",
+      "msg": "Not the TxLINE oracle program"
+    },
+    {
+      "code": 6020,
+      "name": "FixtureNotCancelled",
+      "msg": "Fixture is not cancelled"
+    },
+    {
+      "code": 6021,
+      "name": "ProofInvalid",
+      "msg": "Merkle proof failed validation"
+    },
+    {
+      "code": 6022,
+      "name": "TimeoutNotReached",
+      "msg": "7-day timeout not reached"
     }
   ],
   "types": [

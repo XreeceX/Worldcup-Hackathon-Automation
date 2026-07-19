@@ -1,15 +1,23 @@
 import type { Metadata } from "next";
+import { Barlow_Condensed, Figtree } from "next/font/google";
 import localFont from "next/font/local";
 import { Toaster } from "react-hot-toast";
 import { ClientProviders } from "@/components/ClientProviders";
 import { Header } from "@/components/Header";
 import "./globals.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
+const figtree = Figtree({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  weight: ["400", "500", "600", "700", "800"],
 });
+
+const display = Barlow_Condensed({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ["600", "700", "800"],
+});
+
 const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
   variable: "--font-geist-mono",
@@ -29,11 +37,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
+      <body
+        className={`${figtree.variable} ${display.variable} ${geistMono.variable} flex min-h-dvh flex-col font-sans antialiased`}
+      >
         <ClientProviders>
           <Header />
-          <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</main>
-          <footer className="mx-auto max-w-6xl px-4 pb-10 pt-6 text-center text-xs text-muted/70 sm:px-6">
+          <main className="app-main flex-1">{children}</main>
+          <footer className="app-pad border-t border-edge/60 py-4 text-center text-[11px] text-muted/60">
             Solana devnet · Settlement proven on-chain by TxLINE Merkle proofs ·
             Not a betting product — no counterparty, beneficiary chosen upfront.
           </footer>

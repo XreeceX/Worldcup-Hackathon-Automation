@@ -1,5 +1,12 @@
 import { INDEXER_URL, KEEPER_URL } from './config';
+import {
+  MATCH_WINDOW_MS,
+  applyScoreLifecycle,
+  fixtureBucket,
+} from './fixtures';
+import { buildMatchFromRecords } from './matchData';
 import type { BoardCommitment, ClaimRow, Fixture } from './types';
+import { enrichFixtureMeta, mergeWithWcSchedule } from './wcSchedule';
 
 /** Recursively camelise snake_case keys so the UI is agnostic to API casing. */
 export function camelise<T = unknown>(value: unknown): T {
@@ -84,17 +91,88 @@ export async function fetchCommitment(pubkey: string): Promise<BoardCommitment |
   return normaliseCommitment({ pubkey, ...row });
 }
 
+/** Patch in-play / recent kickoffs with TxLINE scores so lists match Match Centre. */
+async function hydrateFixtureLifecycle(fixtures: Fixture[]): Promise<Fixture[]> {
+  const now = Date.now();
+  const candidates = fixtures.filter((f) => {
+    const ko = Number(f.kickoffTs);
+    if (!Number.isFinite(ko) || ko <= 0 || ko > now) return false;
+    if (now - ko > MATCH_WINDOW_MS) return false;
+    // Already terminal — nothing to learn from scores.
+    if ([5, 10, 13, 15, 16, 100].includes(Number(f.gameState))) return false;
+    // Only fixtures that still look live (or have an in-play game_state).
+    return fixtureBucket(f, now) === 'live' || Number(f.gameState) >= 2;
+  });
+
+  if (!candidates.length) return fixtures;
+
+  const patches = new Map<number, Fixture>();
+  await Promise.all(
+    candidates.map(async (f) => {
+      try {
+        const rows = await fetchScoreFeed(f.fixtureId);
+        if (!rows.length) return;
+        const built = buildMatchFromRecords(rows);
+        if (!built.hasData) return;
+        patches.set(
+          f.fixtureId,
+          applyScoreLifecycle(f, {
+            finalised: built.score.finalised,
+            statusId: built.score.statusId,
+          }),
+        );
+      } catch {
+        /* score optional */
+      }
+    }),
+  );
+
+  if (!patches.size) return fixtures;
+  return fixtures.map((f) => patches.get(f.fixtureId) ?? f);
+}
+
+function withDerivedStatus(f: Fixture): Fixture {
+  const bucket = fixtureBucket(f);
+  return { ...f, status: bucket };
+}
+
 export async function fetchFixtures(status?: string): Promise<Fixture[]> {
   const qs = status ? `?status=${status}` : '';
   const data = await getJson<unknown>(`${INDEXER_URL}/api/fixtures${qs}`);
-  return unwrapList(data).map((f) => ({
-    fixtureId: toNum(f.fixtureId ?? f.id),
-    homeTeam: String(f.homeTeam ?? 'Home'),
-    awayTeam: String(f.awayTeam ?? 'Away'),
-    competition: String(f.competition ?? ''),
-    kickoffTs: toNum(f.kickoffTs),
-    gameState: toNum(f.gameState),
-  }));
+  const mapped = unwrapList(data).map((f) => {
+    const base = {
+      fixtureId: toNum(f.fixtureId ?? f.id),
+      homeTeam: String(f.homeTeam ?? 'Home'),
+      awayTeam: String(f.awayTeam ?? 'Away'),
+      competition: String(f.competition ?? ''),
+      kickoffTs: toNum(f.kickoffTs),
+      gameState: toNum(f.gameState),
+      // Ignore indexer-derived status — recompute after score hydrate.
+      status: undefined as Fixture['status'],
+    };
+    const meta = enrichFixtureMeta(base);
+    return {
+      ...base,
+      competitionKind: meta.kind,
+      stage: meta.stage,
+      stageLabel: meta.stageLabel,
+      year: meta.year,
+    };
+  });
+  const merged = mergeWithWcSchedule(mapped).map((f) => {
+    const meta = enrichFixtureMeta(f);
+    return {
+      ...f,
+      competitionKind: meta.kind,
+      stage: meta.stage,
+      stageLabel: meta.stageLabel,
+      year: meta.year,
+    };
+  });
+  const hydrated = await hydrateFixtureLifecycle(merged);
+  const withStatus = hydrated.map(withDerivedStatus);
+  if (!status) return withStatus;
+  return withStatus.filter((f) => f.status === status);
 }
 
 export async function fetchClaims(wallet: string): Promise<ClaimRow[]> {
@@ -130,4 +208,47 @@ export function feedUrl(): string {
 
 export function liveScoresUrl(fixtureId: number): string {
   return `${KEEPER_URL}/api/scores/live?fixtureId=${fixtureId}`;
+}
+
+function asRecordRows(data: unknown): Record<string, unknown>[] {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    return data.filter((r): r is Record<string, unknown> => !!r && typeof r === 'object');
+  }
+  if (typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.data)) {
+      return obj.data.filter((r): r is Record<string, unknown> => !!r && typeof r === 'object');
+    }
+    return [obj];
+  }
+  return [];
+}
+
+/**
+ * Full match feed (historical + snapshot) for rich timelines.
+ * Falls back to snapshot-only if the feed route is unavailable.
+ */
+export async function fetchScoreFeed(
+  fixtureId: number,
+): Promise<Record<string, unknown>[]> {
+  try {
+    const data = await getJson<unknown>(
+      `${KEEPER_URL}/api/scores/feed/${fixtureId}`,
+      15_000,
+    );
+    const rows = asRecordRows(data);
+    if (rows.length) return rows;
+  } catch {
+    /* fall through to snapshot */
+  }
+  try {
+    const snap = await getJson<unknown>(
+      `${KEEPER_URL}/api/scores/snapshot/${fixtureId}`,
+      10_000,
+    );
+    return asRecordRows(snap);
+  } catch {
+    return [];
+  }
 }

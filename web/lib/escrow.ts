@@ -41,10 +41,15 @@ export interface OnChainCommitment {
 
 const PROGRAM_PUBKEY = new PublicKey((idl as { address: string }).address);
 
-export function deriveCommitmentPda(fixtureId: number, founder: PublicKey): PublicKey {
+export function deriveCommitmentPda(
+  fixtureId: number,
+  founder: PublicKey,
+  nonce: number | BN,
+): PublicKey {
   const fixtureLe = new BN(fixtureId).toArrayLike(Buffer, 'le', 8);
+  const nonceLe = new BN(nonce).toArrayLike(Buffer, 'le', 8);
   return PublicKey.findProgramAddressSync(
-    [Buffer.from('commitment'), fixtureLe, founder.toBuffer()],
+    [Buffer.from('commitment'), fixtureLe, founder.toBuffer(), nonceLe],
     PROGRAM_PUBKEY,
   )[0];
 }
@@ -75,12 +80,15 @@ export class AnchorEscrow implements EscrowInterface {
 
   async createCommitment(params: CreateParams): Promise<{ txSig: string; commitment: string }> {
     const founder = this.wallet.publicKey;
-    const commitment = deriveCommitmentPda(params.fixtureId, founder);
+    // Unique PDA per create — allows many pledges on the same match.
+    const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    const commitment = deriveCommitmentPda(params.fixtureId, founder, nonce);
     const vault = deriveVaultPda(commitment);
 
     const txSig = await this.program.methods
       .createCommitment(
         new BN(params.fixtureId),
+        new BN(nonce),
         new BN(params.kickoffTs),
         params.conditionTemplate,
         new BN(params.conditionParam),

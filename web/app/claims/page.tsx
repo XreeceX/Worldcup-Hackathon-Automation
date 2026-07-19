@@ -96,11 +96,12 @@ export default function ClaimsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
-      {/* ClaimsHeader */}
-      <section className="mb-6">
-        <h1 className="text-3xl font-black tracking-tight">Pending claims</h1>
-        <p className="mt-2 text-sm text-muted">
+    <div className="mx-auto w-full max-w-5xl">
+      <section className="mb-6 fade-up">
+        <h1 className="font-display text-4xl font-extrabold uppercase tracking-wide sm:text-5xl">
+          Pending claims
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted sm:text-base">
           Refunds from commitments that resolved <em>not met</em> or were
           voided. Claims never expire.
         </p>

@@ -25,9 +25,16 @@ function openSseResponse(req, res) {
   };
 }
 
+function parseCorsOrigin(raw) {
+  const value = String(raw || 'http://localhost:3000').trim();
+  if (value === '*') return true;
+  const list = value.split(',').map((s) => s.trim()).filter(Boolean);
+  return list.length <= 1 ? list[0] : list;
+}
+
 export function createServer({ cfg, keeper }) {
   const app = express();
-  app.use(cors({ origin: 'http://localhost:3000' }));
+  app.use(cors({ origin: parseCorsOrigin(cfg.corsOrigin) }));
   app.use(express.json());
 
   // SSE stream of resolution/void events from the internal feed bus.
@@ -53,6 +60,68 @@ export function createServer({ cfg, keeper }) {
     };
     keeper.scoreBus.on('score', listener);
     req.on('close', () => keeper.scoreBus.off('score', listener));
+  });
+
+  // Latest TxLINE score snapshot for a fixture (stats for the match-details UI).
+  app.get('/api/scores/snapshot/:fixtureId', async (req, res) => {
+    try {
+      const fixtureId = Number(req.params.fixtureId);
+      if (!Number.isFinite(fixtureId)) {
+        return res.status(400).json({ error: 'fixtureId is required' });
+      }
+      const data = await keeper.txline.getScoresSnapshot(fixtureId);
+      res.json(data ?? {});
+    } catch (e) {
+      // Upcoming / unknown fixtures often 404 from TxLINE — treat as empty snapshot.
+      const status = e?.response?.status;
+      if (status === 404) {
+        return res.json({});
+      }
+      log.error('[server] /api/scores/snapshot failed', e.message);
+      res.status(502).json({ error: e.message });
+    }
+  });
+
+  // Full score feed for match-details UI: historical (rich timeline) with
+  // snapshot fallback. Returns a de-duplicated array of records.
+  app.get('/api/scores/feed/:fixtureId', async (req, res) => {
+    try {
+      const fixtureId = Number(req.params.fixtureId);
+      if (!Number.isFinite(fixtureId)) {
+        return res.status(400).json({ error: 'fixtureId is required' });
+      }
+      const byKey = new Map();
+      const ingest = (rows) => {
+        if (!Array.isArray(rows)) return;
+        for (const r of rows) {
+          if (!r || typeof r !== 'object') continue;
+          const key = `${r.Seq ?? r.seq ?? ''}:${r.Action ?? r.action ?? ''}:${r.Id ?? r.id ?? ''}`;
+          byKey.set(key, r);
+        }
+      };
+      try {
+        ingest(await keeper.txline.getScoresHistorical(fixtureId));
+      } catch (e) {
+        if (e?.response?.status !== 404) {
+          log.warn('[server] historical feed unavailable', e.message);
+        }
+      }
+      try {
+        const snap = await keeper.txline.getScoresSnapshot(fixtureId);
+        ingest(Array.isArray(snap) ? snap : snap ? [snap] : []);
+      } catch (e) {
+        if (e?.response?.status !== 404) throw e;
+      }
+      const out = [...byKey.values()].sort(
+        (a, b) => Number(a.Seq ?? a.seq ?? 0) - Number(b.Seq ?? b.seq ?? 0),
+      );
+      res.json(out);
+    } catch (e) {
+      const status = e?.response?.status;
+      if (status === 404) return res.json([]);
+      log.error('[server] /api/scores/feed failed', e.message);
+      res.status(502).json({ error: e.message });
+    }
   });
 
   // Open commitments for a fixture (indexer proxy, on-chain scan fallback).

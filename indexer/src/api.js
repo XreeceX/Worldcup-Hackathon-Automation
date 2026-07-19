@@ -5,9 +5,16 @@ import { config } from './config.js';
 import { buildBoardQuery, boardRowToJson, fixtureBucket } from './lib.js';
 import { state } from './listener.js';
 
+function parseCorsOrigin(raw) {
+  const value = String(raw || 'http://localhost:3000').trim();
+  if (value === '*') return true;
+  const list = value.split(',').map((s) => s.trim()).filter(Boolean);
+  return list.length <= 1 ? list[0] : list;
+}
+
 export function createApp() {
   const app = express();
-  app.use(cors({ origin: config.corsOrigin }));
+  app.use(cors({ origin: parseCorsOrigin(config.corsOrigin) }));
 
   // GET /api/board?status=&fixture_id=&sort=&limit=&offset=
   app.get('/api/board', async (req, res) => {

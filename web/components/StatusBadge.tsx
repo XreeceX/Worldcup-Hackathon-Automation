@@ -2,9 +2,9 @@ import type { CommitmentStatus } from '@/lib/types';
 
 const STYLES: Record<CommitmentStatus, string> = {
   Open: 'bg-pitch-500/15 text-pitch-400 border-pitch-600/40',
-  Executed: 'bg-gold-500/15 text-gold-300 border-gold-500/40',
-  Refunded: 'bg-amber-500/15 text-amber-400 border-amber-500/40',
-  Void: 'bg-white/5 text-muted border-edge',
+  Executed: 'bg-pitch-500/10 text-pitch-300 border-pitch-600/30',
+  Refunded: 'bg-rose-500/15 text-rose-300 border-rose-500/35',
+  Void: 'bg-rose-500/10 text-rose-200/80 border-rose-500/25',
   Closed: 'bg-white/5 text-muted border-edge',
 };
 

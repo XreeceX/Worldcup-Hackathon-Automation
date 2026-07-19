@@ -16,6 +16,8 @@ export const config = {
     process.env.IDL_PATH ?? path.resolve(here, '../../program/target/idl/commitment.json'),
   txline: {
     origin: 'https://txline-dev.txodds.com',
+    /** World Cup only — pledges are WC-scoped (competitionId 72). */
+    competitionIds: [72],
     competitionId: 72,
     startEpochDay: 20624,
     jwt: process.env.TXLINE_JWT,
@@ -25,5 +27,6 @@ export const config = {
   fixtureRefreshMs: 10 * 60 * 1000,
   reconcileMs: 10 * 60 * 1000,
   idlPollMs: 15 * 1000,
-  corsOrigin: 'http://localhost:3000',
+  // Comma-separated list, or "*" for any origin (needed when web is on Vercel).
+  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
 };

@@ -47,6 +47,8 @@ export function loadEnv(env = process.env) {
     idlPath: env.IDL_PATH
       ? path.resolve(env.IDL_PATH)
       : path.resolve(KEEPER_ROOT, '..', 'program', 'target', 'idl', 'commitment.json'),
+    // Comma-separated list, or "*" for any origin (needed when web is on Vercel).
+    corsOrigin: env.CORS_ORIGIN || 'http://localhost:3000',
   };
 
   if (cfg.anchorWallet && !fs.existsSync(cfg.anchorWallet)) {

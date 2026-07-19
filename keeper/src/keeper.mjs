@@ -75,7 +75,7 @@ export function createKeeper({ cfg, txline, chain }) {
   async function resolveCommitment(c, fixtureId, seq) {
     const statKeys = statKeysForTemplate(c.conditionTemplate);
     const proofJson = await txline.getStatValidation(fixtureId, seq, statKeys);
-    const { payload, epochDay } = mapStatValidation(proofJson);
+    const { payload, epochDay } = mapStatValidation(proofJson, statKeys);
 
     log.info(
       `[keeper] resolving ${c.pubkey} (fixture ${fixtureId}, seq ${seq}, epochDay ${epochDay})`
@@ -349,6 +349,7 @@ export function createKeeper({ cfg, txline, chain }) {
     recentFeed,
     resolvedFixtures,
     chain,
+    txline,
     get mode() {
       return cfg.replayFixtureId != null ? 'replay' : 'live';
     },

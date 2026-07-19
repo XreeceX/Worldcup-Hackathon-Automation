@@ -5,7 +5,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useEscrow } from '@/hooks/useEscrow';
 import { requestKeeperResolve } from '@/lib/api';
-import { MIN_DEPOSIT_SOL, TIMEOUT_SECONDS } from '@/lib/config';
+import { MIN_DEPOSIT_SOL, TIMEOUT_SECONDS, MATCH_WINDOW_SECONDS } from '@/lib/config';
 import { solToLamports } from '@/lib/format';
 import type { OnChainCommitment } from '@/lib/escrow';
 import { toastTxError, toastTxSuccess } from './toast';
@@ -30,8 +30,9 @@ export function JoinButton({ commitment, onChanged }: ActionProps) {
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const beforeKickoff = Date.now() / 1000 < commitment.kickoffTs;
-  if (commitment.status !== 'Open' || !beforeKickoff) return null;
+  const withinMatchWindow =
+    Date.now() / 1000 < commitment.kickoffTs + MATCH_WINDOW_SECONDS;
+  if (commitment.status !== 'Open' || !withinMatchWindow) return null;
   if (entry && !entry.withdrawn) return null; // already an active member
   if (entry?.withdrawn) {
     return (

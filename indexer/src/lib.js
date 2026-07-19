@@ -16,13 +16,35 @@ export function decodePackedFixtureId(packed) {
  * when unknown we fall back to generic "Home team"/"Away team".
  */
 export function conditionLabel(template, param, homeTeam, awayTeam) {
-  switch (Number(template)) {
+  const home = homeTeam || 'Home team';
+  const away = awayTeam || 'Away team';
+  const t = Number(template);
+  const p = Number(param);
+  switch (t) {
     case 0:
       return 'Both teams score';
     case 1:
-      return Number(param) === 0
-        ? `${homeTeam || 'Home team'} wins`
-        : `${awayTeam || 'Away team'} wins`;
+      return p === 0 ? `${home} wins` : `${away} wins`;
+    case 2:
+      return 'Draw (full time)';
+    case 3: {
+      const team = Math.floor(p / 256);
+      const n = p % 256;
+      const side = team === 0 ? home : away;
+      return `${side} scores at least ${n}`;
+    }
+    case 4:
+      return `Total goals ≥ ${p}`;
+    case 5: {
+      const team = Math.floor(p / 256);
+      const n = p % 256;
+      const side = team === 0 ? home : away;
+      return `${side} wins by ≥ ${n}`;
+    }
+    case 6:
+      return p === 0 ? `${home} wins on penalties` : `${away} wins on penalties`;
+    case 7:
+      return 'Goes to penalties';
     default:
       return 'Unknown condition';
   }
@@ -146,17 +168,18 @@ export function mapFixtureRecord(raw) {
   };
 }
 
-/** Longest plausible match window (ET + shootout + stoppages). */
-const MATCH_WINDOW_MS = 3.5 * 60 * 60 * 1000;
+/** Earliest plausible full-time after kickoff (90' + stoppage buffer). */
+const EST_FULL_TIME_MS = 105 * 60 * 1000;
 
 /** Fixture lifecycle bucket used by GET /api/fixtures?status=. */
 export function fixtureBucket(gameState, kickoffTsMs, nowMs = Date.now()) {
   const gs = Number(gameState);
-  if ([5, 10, 13, 15, 16].includes(gs)) return 'finished';
+  if ([5, 10, 13, 15, 16, 100].includes(gs)) return 'finished';
+  // Explicit in-play (H1/HT/H2/ET/pens) — trust TxLINE game_state.
   if (gs >= 2) return 'live';
-  // NS / unknown: decide by clock. The snapshot often reports game_state 0
-  // even for completed matches, so cap "live" at a generous match window.
+  // NS / unknown: snapshot often leaves game_state 0 after FT. Use est. FT
+  // instead of a multi-hour "live" window so lists match score finalisation.
   if (Number(kickoffTsMs) > nowMs) return 'upcoming';
-  if (nowMs - Number(kickoffTsMs) <= MATCH_WINDOW_MS) return 'live';
-  return 'finished';
+  if (nowMs - Number(kickoffTsMs) >= EST_FULL_TIME_MS) return 'finished';
+  return 'live';
 }

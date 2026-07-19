@@ -7,12 +7,25 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { useEscrow } from '@/hooks/useEscrow';
 import {
+  buildConditionParam,
+  CONDITION_OPTIONS,
   conditionLabel,
+  GOALS_DISCLOSURE,
+  PENS_DISCLOSURE,
   SHOOTOUT_DISCLOSURE,
-  TEMPLATE_BTTS,
   TEMPLATE_TEAM_WINS,
+  TEMPLATE_WINS_BY_AT_LEAST,
+  TEMPLATE_WINS_ON_PENS,
+  type ConditionOption,
 } from '@/lib/conditions';
 import { MIN_DEPOSIT_SOL } from '@/lib/config';
+import {
+  canCreatePledge,
+  fixtureBucket,
+  isKnockoutWorldCupFixture,
+  isMatchEnded,
+  isPledgeResultsPending,
+} from '@/lib/fixtures';
 import { solToLamports, truncateAddress, utf8ByteLength } from '@/lib/format';
 import type { Fixture } from '@/lib/types';
 import { toastTxError, toastTxSuccess } from './toast';
@@ -39,39 +52,117 @@ function StepDots({ step }: { step: Step }) {
   );
 }
 
-export function CreateCommitmentForm({ fixture }: { fixture: Fixture }) {
+function ThresholdStepper({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <div>
+      <p className="label">{label}</p>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className="btn-secondary h-10 w-10 shrink-0 px-0 text-lg"
+          disabled={value <= min}
+          onClick={() => onChange(Math.max(min, value - 1))}
+          aria-label="Decrease"
+        >
+          −
+        </button>
+        <span className="min-w-[3rem] text-center font-mono text-2xl font-black tabular-nums">
+          {value}
+        </span>
+        <button
+          type="button"
+          className="btn-secondary h-10 w-10 shrink-0 px-0 text-lg"
+          disabled={value >= max}
+          onClick={() => onChange(Math.min(max, value + 1))}
+          aria-label="Increase"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function CreateCommitmentForm({
+  fixture,
+  matchFinalised,
+  statusId,
+}: {
+  fixture: Fixture;
+  matchFinalised?: boolean;
+  statusId?: number | null;
+}) {
   const router = useRouter();
   const { connected, publicKey } = useWallet();
   const escrow = useEscrow();
-  // publicKey is the reliable signal — `connected` alone can lag after select().
   const ready = Boolean(connected && publicKey && escrow);
 
   const [step, setStep] = useState<Step>(1);
   const [template, setTemplate] = useState<number | null>(null);
-  const [param, setParam] = useState<number>(0);
+  const [includePens, setIncludePens] = useState(false);
+  const [team, setTeam] = useState<number>(0);
+  const [threshold, setThreshold] = useState<number>(2);
   const [beneficiary, setBeneficiary] = useState('');
   const [amount, setAmount] = useState('');
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const kickoffPassed = Date.now() >= fixture.kickoffTs;
+  const now = Date.now();
+  const worldCup = isKnockoutWorldCupFixture(fixture);
+  const bucket = fixtureBucket(fixture, now);
+  const ended = isMatchEnded(fixture, { finalised: matchFinalised, statusId }, now);
+  const resultsPending = isPledgeResultsPending(
+    fixture,
+    { finalised: matchFinalised, statusId },
+    now,
+  );
+  const creatable = canCreatePledge(fixture, now) && !ended;
+
+  const selected: ConditionOption | undefined = useMemo(
+    () => CONDITION_OPTIONS.find((o) => o.template === template),
+    [template],
+  );
+
+  /** Team wins + include pens → shootout template; otherwise the selected template. */
+  const effectiveTemplate = useMemo(() => {
+    if (template === TEMPLATE_TEAM_WINS && includePens) return TEMPLATE_WINS_ON_PENS;
+    return template;
+  }, [template, includePens]);
+
+  const param = useMemo(() => {
+    if (effectiveTemplate == null) return 0;
+    const n = selected?.needsThreshold
+      ? Math.min(selected.maxN ?? 10, Math.max(selected.minN ?? 1, threshold))
+      : threshold;
+    return buildConditionParam(effectiveTemplate, team, n);
+  }, [effectiveTemplate, team, threshold, selected]);
 
   const label = useMemo(
     () =>
-      template == null
+      effectiveTemplate == null
         ? ''
-        : conditionLabel(template, param, fixture.homeTeam, fixture.awayTeam),
-    [template, param, fixture],
+        : conditionLabel(effectiveTemplate, param, fixture.homeTeam, fixture.awayTeam),
+    [effectiveTemplate, param, fixture],
   );
 
   const defaultName = useMemo(() => {
-    if (template === TEMPLATE_TEAM_WINS) {
-      return `${param === 0 ? fixture.homeTeam : fixture.awayTeam} DAO`;
-    }
-    return `${label || 'Match'} pledge`;
-  }, [template, param, fixture, label]);
+    if (!label) return 'Match pledge';
+    if (label.length <= 64) return label;
+    return `${label.slice(0, 61)}…`;
+  }, [label]);
 
-  // --- validation ---
   const beneficiaryValid = useMemo(() => {
     try {
       return beneficiary.length > 0 && Boolean(new PublicKey(beneficiary));
@@ -85,17 +176,28 @@ export function CreateCommitmentForm({ fixture }: { fixture: Fixture }) {
   const nameBytes = utf8ByteLength(name || defaultName);
   const nameValid = nameBytes <= 64;
   const step2Valid = beneficiaryValid && amountValid && nameValid;
+  const step1Valid = template != null;
+
+  function pickTemplate(opt: ConditionOption) {
+    setTemplate(opt.template);
+    setIncludePens(false);
+    if (opt.needsThreshold) {
+      const mid = Math.round(((opt.minN ?? 1) + (opt.maxN ?? 5)) / 2);
+      setThreshold(mid);
+    }
+  }
 
   async function signAndLock() {
     if (!ready || !escrow) return;
-    if (template == null || !step2Valid) return;
+    if (effectiveTemplate == null || !step2Valid) return;
+    if (!canCreatePledge(fixture)) return;
     setSubmitting(true);
     try {
       const { txSig, commitment } = await escrow.createCommitment({
         fixtureId: fixture.fixtureId,
         kickoffTs: Math.floor(fixture.kickoffTs / 1000),
-        conditionTemplate: template,
-        conditionParam: template === TEMPLATE_TEAM_WINS ? param : 0,
+        conditionTemplate: effectiveTemplate,
+        conditionParam: param,
         beneficiary,
         depositLamports: solToLamports(amountNum),
         name: name || defaultName,
@@ -109,91 +211,170 @@ export function CreateCommitmentForm({ fixture }: { fixture: Fixture }) {
     }
   }
 
-  if (kickoffPassed) {
+  if (!worldCup) {
     return (
-      <div className="card p-6 text-sm text-muted">
-        This match has kicked off — new commitments are locked. Pick an upcoming
-        fixture from the board to create a pledge.
+      <div className="card p-6 font-sans text-sm text-muted">
+        Pledges are knockout World Cup only (Round of 32 onward). Group stage
+        and other competitions are not available.
+      </div>
+    );
+  }
+
+  if (ended || bucket === 'finished' || resultsPending) {
+    return null;
+  }
+
+  if (!creatable) {
+    return (
+      <div className="card p-6 font-sans text-sm text-muted">
+        {ended ? (
+          <>
+            This match has ended — new pledges are closed. Open existing
+            commitments on the pledge board to resolve or claim.
+          </>
+        ) : (
+          <>
+            New pledges are only open on upcoming or live World Cup knockout
+            matches.
+          </>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="card p-6 sm:p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-lg font-black tracking-tight">Create a commitment</h2>
+    <div className="card p-6 font-sans sm:p-8">
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold tracking-tight text-ink">Create a commitment</h2>
         <StepDots step={step} />
       </div>
+      <p className="mb-4 text-xs text-muted">
+        Create as many pledges as you like while the match is upcoming or live ·
+        settle after full time via TxLINE proof
+      </p>
 
       {step === 1 && (
         <div>
-          <p className="label">Step 1 — Select condition</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <button
-              onClick={() => {
-                setTemplate(TEMPLATE_BTTS);
-              }}
-              className={`rounded-2xl border p-5 text-left transition-colors ${
-                template === TEMPLATE_BTTS
-                  ? 'border-pitch-500 bg-pitch-500/10'
-                  : 'border-edge bg-raised hover:border-pitch-700'
-              }`}
-            >
-              <p className="text-base font-bold">Both teams score</p>
-              <p className="mt-1 text-xs text-muted">
-                {fixture.homeTeam} and {fixture.awayTeam} each score at least one
-                goal.
-              </p>
-            </button>
-            <button
-              onClick={() => setTemplate(TEMPLATE_TEAM_WINS)}
-              className={`rounded-2xl border p-5 text-left transition-colors ${
-                template === TEMPLATE_TEAM_WINS
-                  ? 'border-pitch-500 bg-pitch-500/10'
-                  : 'border-edge bg-raised hover:border-pitch-700'
-              }`}
-            >
-              <p className="text-base font-bold">Team wins</p>
-              <p className="mt-1 text-xs text-muted">
-                Your chosen side wins on goals at full time.
-              </p>
-            </button>
+          <p className="label">Step 1 — Build condition</p>
+          <div className="flex flex-col gap-2">
+            {CONDITION_OPTIONS.map((opt) => {
+              const active = template === opt.template;
+              return (
+                <button
+                  key={opt.template}
+                  type="button"
+                  onClick={() => pickTemplate(opt)}
+                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                    active
+                      ? 'border-pitch-500 bg-pitch-500/10'
+                      : 'border-edge bg-raised/60 hover:border-pitch-700'
+                  }`}
+                >
+                  <p className="text-sm font-bold text-ink">{opt.title}</p>
+                  <p className="mt-0.5 text-xs text-muted">{opt.blurb}</p>
+                </button>
+              );
+            })}
           </div>
 
-          {template === TEMPLATE_TEAM_WINS && (
-            <div className="mt-4 rounded-2xl border border-edge bg-raised p-4">
-              <p className="label">Which team?</p>
+          {selected?.needsTeam && (
+            <div className="mt-4 rounded-xl border border-edge bg-raised/50 p-4">
+              <p className="label">Team</p>
               <div className="flex flex-wrap gap-2">
-                {[fixture.homeTeam, fixture.awayTeam].map((team, i) => (
-                  <label
-                    key={team}
-                    className={`cursor-pointer rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
-                      param === i
+                {[fixture.homeTeam, fixture.awayTeam].map((t, i) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTeam(i)}
+                    className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
+                      team === i
                         ? 'border-pitch-500 bg-pitch-500/15 text-pitch-400'
                         : 'border-edge text-muted hover:text-ink'
                     }`}
                   >
-                    <input
-                      type="radio"
-                      name="team"
-                      className="sr-only"
-                      checked={param === i}
-                      onChange={() => setParam(i)}
-                    />
-                    {team} wins
-                  </label>
+                    {t}
+                  </button>
                 ))}
               </div>
-              <p className="mt-3 text-xs italic text-amber-400/90">
-                {SHOOTOUT_DISCLOSURE}
-              </p>
+
+              {template === TEMPLATE_TEAM_WINS && (
+                <div className="mt-4 flex items-center justify-between gap-3 border-t border-edge pt-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-ink">Include penalties</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {includePens
+                        ? 'Settle on the shootout only (full-time goals ignored).'
+                        : 'Settle on goals after FT/ET — shootout does not count.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={includePens}
+                    aria-label="Include penalties"
+                    onClick={() => setIncludePens((v) => !v)}
+                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                      includePens ? 'bg-pitch-500' : 'bg-edge'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-6 w-6 rounded-full bg-ink shadow transition-transform ${
+                        includePens ? 'left-5' : 'left-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
+
+              {template === TEMPLATE_TEAM_WINS && (
+                <p className="mt-3 text-xs italic text-amber-400/90">
+                  {includePens ? PENS_DISCLOSURE : SHOOTOUT_DISCLOSURE}
+                </p>
+              )}
+              {template === TEMPLATE_WINS_BY_AT_LEAST && (
+                <p className="mt-3 text-xs italic text-amber-400/90">
+                  {SHOOTOUT_DISCLOSURE}
+                </p>
+              )}
             </div>
+          )}
+
+          {selected?.disclosure === 'goals' &&
+            template != null &&
+            template !== TEMPLATE_TEAM_WINS &&
+            template !== TEMPLATE_WINS_BY_AT_LEAST && (
+              <p className="mt-3 text-xs text-muted">{GOALS_DISCLOSURE}</p>
+            )}
+          {selected?.disclosure === 'pens' && (
+            <p className="mt-3 text-xs italic text-amber-400/90">{PENS_DISCLOSURE}</p>
+          )}
+
+          {selected?.needsThreshold && (
+            <div className="mt-4 rounded-xl border border-edge bg-raised/50 p-4">
+              <ThresholdStepper
+                label={selected.thresholdLabel ?? 'Value'}
+                value={Math.min(
+                  selected.maxN ?? 10,
+                  Math.max(selected.minN ?? 1, threshold),
+                )}
+                min={selected.minN ?? 1}
+                max={selected.maxN ?? 10}
+                onChange={setThreshold}
+              />
+            </div>
+          )}
+
+          {template != null && (
+            <p className="mt-4 rounded-xl border border-pitch-600/30 bg-pitch-500/10 px-4 py-3 text-sm font-semibold text-pitch-300">
+              Preview: {label}
+            </p>
           )}
 
           <div className="mt-6 flex justify-end">
             <button
+              type="button"
               className="btn-primary"
-              disabled={template == null}
+              disabled={!step1Valid}
               onClick={() => setStep(2)}
             >
               Continue
@@ -221,7 +402,7 @@ export function CreateCommitmentForm({ fixture }: { fixture: Fixture }) {
               <p className="mt-1.5 text-xs text-red-400">Not a valid Solana address.</p>
             )}
             <p className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
-              ⚠ This address is unverified and cannot be changed after you sign.
+              This address is unverified and cannot be changed after you sign.
               Funds sent here are permanent.
             </p>
           </div>
@@ -263,10 +444,15 @@ export function CreateCommitmentForm({ fixture }: { fixture: Fixture }) {
           </div>
 
           <div className="flex justify-between">
-            <button className="btn-secondary" onClick={() => setStep(1)}>
+            <button type="button" className="btn-secondary" onClick={() => setStep(1)}>
               Back
             </button>
-            <button className="btn-primary" disabled={!step2Valid} onClick={() => setStep(3)}>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!step2Valid}
+              onClick={() => setStep(3)}
+            >
               Review
             </button>
           </div>
@@ -302,11 +488,21 @@ export function CreateCommitmentForm({ fixture }: { fixture: Fixture }) {
             beneficiary {truncateAddress(beneficiary)} is only paid if it holds.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-            <button className="btn-secondary" onClick={() => setStep(2)} disabled={submitting}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setStep(2)}
+              disabled={submitting}
+            >
               Back
             </button>
             {ready ? (
-              <button className="btn-primary" onClick={signAndLock} disabled={submitting}>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={signAndLock}
+                disabled={submitting}
+              >
                 {submitting ? 'Confirming…' : 'Sign and lock'}
               </button>
             ) : (

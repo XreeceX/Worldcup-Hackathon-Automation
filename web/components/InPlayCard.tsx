@@ -1,16 +1,18 @@
 'use client';
 
+import Link from 'next/link';
+import { CountryFlag } from '@/components/CountryFlag';
 import { useLiveScore } from '@/hooks/useLiveScore';
 import { conditionStatusText, evaluateCondition } from '@/lib/conditions';
+import { isPledgeResultsPending } from '@/lib/fixtures';
 import type { CommitmentStatus } from '@/lib/types';
 
 /**
- * Live in-play card (FR-15): live score via the keeper score proxy,
- * plain-language condition status, and a match event log.
+ * Compact match summary on a commitment page (FR-15).
+ * Full stats live on the fixture page — this only links there.
  *
- * "Resolved" is driven exclusively by `resolvedOnChain` (a `resolved` feed
- * event or an on-chain terminal status) — never inferred from score data
- * alone (FR-15.5).
+ * "Resolved" is driven exclusively by `resolvedOnChain` — never inferred from
+ * score data alone (FR-15.5).
  */
 export function InPlayCard({
   fixtureId,
@@ -20,6 +22,7 @@ export function InPlayCard({
   awayTeam,
   status,
   resolvedOnChain,
+  kickoffTs,
 }: {
   fixtureId: number;
   template: number;
@@ -28,12 +31,21 @@ export function InPlayCard({
   awayTeam?: string;
   status: CommitmentStatus;
   resolvedOnChain: boolean;
+  competition?: string | null;
+  kickoffTs?: number | null;
 }) {
-  const { score, events, state, hasData } = useLiveScore(fixtureId);
+  const { score, state, hasData } = useLiveScore(fixtureId);
   const home = homeTeam ?? 'Home';
   const away = awayTeam ?? 'Away';
 
-  const liveState = evaluateCondition(template, param, score.homeGoals, score.awayGoals);
+  const liveState = evaluateCondition(
+    template,
+    param,
+    score.homeGoals,
+    score.awayGoals,
+    score.stats.homePens,
+    score.stats.awayPens,
+  );
   const displayState: 'tracking' | 'met' | 'resolved' = resolvedOnChain
     ? 'resolved'
     : liveState;
@@ -47,91 +59,110 @@ export function InPlayCard({
           ? 'Void — deposits are reclaimable'
           : 'Resolved on-chain';
 
+  const finished =
+    score.finalised ||
+    score.statusId === 5 ||
+    score.statusId === 10 ||
+    score.statusId === 13 ||
+    score.statusId === 100;
+  const resultsPending =
+    !resolvedOnChain &&
+    kickoffTs != null &&
+    isPledgeResultsPending(
+      { kickoffTs, gameState: score.statusId ?? 0, status: finished ? 'finished' : undefined },
+      { finalised: score.finalised, statusId: score.statusId },
+    );
+  const notStarted =
+    !finished && (score.statusId == null || score.statusId <= 1 || !hasData);
+  const inPlay = !finished && !notStarted;
+  const feedLabel = finished
+    ? 'Match ended'
+    : notStarted
+      ? 'Not started'
+      : state === 'open'
+        ? 'Live'
+        : 'Reconnecting…';
+
   return (
     <section className="card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-edge bg-raised/60 px-5 py-3">
-        <h2 className="text-xs font-black uppercase tracking-wider">In play</h2>
-        <span
-          className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${
-            state === 'open' ? 'text-pitch-400' : 'text-amber-400'
-          }`}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              state === 'open' ? 'bg-pitch-400' : 'animate-pulse bg-amber-400'
-            }`}
-          />
-          {state === 'open' ? 'LIVE FEED' : 'Reconnecting…'}
-        </span>
-      </div>
-
-      {/* LiveScore */}
-      <div className="px-5 py-6 text-center">
-        {hasData ? (
-          <>
-            <p className="font-mono text-5xl font-black tabular-nums tracking-tight">
-              {score.homeGoals}
-              <span className="mx-2 text-muted">–</span>
-              {score.awayGoals}
-            </p>
-            <p className="mt-2 text-sm font-semibold text-muted">
-              {home} vs {away}
-              {score.minute ? ` · ${score.minute}'` : ''}
-              {score.finalised ? ' · FT' : ''}
-            </p>
-          </>
-        ) : (
-          <p className="py-4 text-sm text-muted">
-            Waiting for live score data{state !== 'open' ? ' — reconnecting to the score feed…' : '…'}
+      <Link
+        href={`/fixture/${fixtureId}`}
+        className="flex w-full flex-col gap-4 px-5 py-5 text-left transition-colors hover:bg-raised/40 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-6"
+      >
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted">
+            Match details
           </p>
-        )}
-      </div>
+          <p className="mt-1.5 flex flex-wrap items-center gap-2 text-lg font-black tracking-tight sm:text-xl">
+            <span className="inline-flex items-center gap-1.5">
+              <CountryFlag team={home} size={22} />
+              {home}
+            </span>
+            <span className="font-mono text-pitch-400">
+              {hasData ? `${score.homeGoals}–${score.awayGoals}` : 'vs'}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <CountryFlag team={away} size={22} />
+              {away}
+            </span>
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            {finished
+              ? 'Full time · open fixture for stats, lineups & events'
+              : inPlay
+                ? `In play${score.minute ? ` · ${score.minute}` : ''} · open fixture for full match centre`
+                : 'Open fixture for stats, lineups & events'}
+            {' · '}
+            <span className={inPlay && state === 'open' ? 'text-pitch-400' : ''}>
+              {feedLabel}
+            </span>
+          </p>
+        </div>
+        <span className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-pitch-500 px-5 py-3 text-sm font-bold text-ink shadow-sm shadow-pitch-900/30">
+          View fixture
+          <span aria-hidden>→</span>
+        </span>
+      </Link>
 
-      {/* ConditionStatus */}
       <div
         className={`mx-5 mb-5 rounded-xl border px-4 py-3 text-sm font-semibold ${
           displayState === 'resolved'
             ? status === 'Executed'
               ? 'border-gold-500/40 bg-gold-500/10 text-gold-300'
               : 'border-amber-500/40 bg-amber-500/10 text-amber-400'
-            : displayState === 'met'
-              ? 'border-pitch-600/50 bg-pitch-500/10 text-pitch-400'
-              : 'border-edge bg-raised text-muted'
+            : resultsPending
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+              : displayState === 'met'
+                ? 'border-pitch-600/50 bg-pitch-500/10 text-pitch-400'
+                : 'border-edge bg-raised text-muted'
         }`}
       >
         <span className="mr-2 text-[10px] font-black uppercase tracking-widest opacity-80">
-          {displayState === 'resolved' ? 'Resolved' : displayState === 'met' ? 'Met' : 'Tracking'}
+          {displayState === 'resolved'
+            ? 'Resolved'
+            : resultsPending
+              ? 'Results pending'
+              : displayState === 'met'
+                ? 'Met'
+                : 'Tracking'}
         </span>
         {displayState === 'resolved'
           ? resolvedLine
-          : conditionStatusText(template, param, score.homeGoals, score.awayGoals, home, away) +
-            (hasData ? ` · ${score.homeGoals}–${score.awayGoals}${score.minute ? ` (${score.minute}')` : ''}` : '')}
-      </div>
-
-      {/* EventLog */}
-      <div className="border-t border-edge px-5 py-4">
-        <h3 className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted">
-          Match events
-        </h3>
-        {events.length === 0 ? (
-          <p className="text-xs text-muted">No events yet — goals and cards appear here as they happen.</p>
-        ) : (
-          <ul className="flex flex-col gap-1.5">
-            {events.map((ev) => (
-              <li key={ev.id} className="flex items-baseline gap-2 text-xs">
-                <span className="w-10 shrink-0 font-mono font-bold text-muted">
-                  {ev.minute ? `${ev.minute}'` : '—'}
-                </span>
-                <span aria-hidden>{ev.kind === 'goal' ? '⚽' : ev.kind === 'card' ? '🟨' : 'ℹ️'}</span>
-                <span className="text-ink/90">
-                  {ev.kind === 'goal' && ev.team
-                    ? ev.label.replace('home team', home).replace('away team', away)
-                    : ev.label}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+          : resultsPending
+            ? `Full time ${score.homeGoals}–${score.awayGoals} is final — settlement proof may take a few minutes. Match centre stays accurate.`
+            : conditionStatusText(
+                template,
+                param,
+                score.homeGoals,
+                score.awayGoals,
+                home,
+                away,
+                score.stats.homePens,
+                score.stats.awayPens,
+              ) +
+              (hasData
+                ? ` · ${score.homeGoals}–${score.awayGoals}${score.minute ? ` (${score.minute})` : ''}`
+                : '')}
       </div>
     </section>
   );

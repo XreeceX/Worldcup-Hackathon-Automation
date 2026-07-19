@@ -13,8 +13,10 @@ export const GAME_STATE_CANCELLED = 16;
 /** TxLINE marks a fully finalised score record with period/statusId 100. */
 export const FINAL_PERIOD = 100;
 
-/** Both shipped templates (BTTS, TeamWins) prove P1/P2 total goals. */
-export function statKeysForTemplate(_template) {
+/** Goals [1,2] for FT (ET included); shootout [6001,6002] for pen templates. */
+export function statKeysForTemplate(template) {
+  const t = Number(template);
+  if (t === 6 || t === 7) return [6001, 6002];
   return [1, 2];
 }
 
@@ -74,10 +76,10 @@ const mapProof = (arr) =>
  * (txline-boilerplate.md §validateStatV2 Step 2). i64 fields become BN,
  * hashes become number arrays, statsToProve[i] pairs with statProofs[i].
  *
- * The program pins the proof to stat keys [1, 2] in order and period 100 —
+ * The program pins the proof to the template's stat keys in order and period 100 —
  * we enforce the same here so a bad proof fails loudly before any tx is sent.
  */
-export function mapStatValidation(val) {
+export function mapStatValidation(val, expectedKeys = [1, 2]) {
   const stats = (val.statsToProve ?? []).map((stat, i) => ({
     stat: { key: stat.key, value: stat.value, period: stat.period },
     statProof: mapProof(val.statProofs?.[i]),
@@ -86,8 +88,11 @@ export function mapStatValidation(val) {
   stats.sort((a, b) => a.stat.key - b.stat.key);
 
   const keys = stats.map((s) => s.stat.key);
-  if (keys.length !== 2 || keys[0] !== 1 || keys[1] !== 2) {
-    throw new Error(`stat-validation proof must cover keys [1,2]; got [${keys.join(',')}]`);
+  const exp = expectedKeys.map(Number);
+  if (keys.length !== 2 || keys[0] !== exp[0] || keys[1] !== exp[1]) {
+    throw new Error(
+      `stat-validation proof must cover keys [${exp.join(',')}]; got [${keys.join(',')}]`,
+    );
   }
   const badPeriod = stats.find((s) => s.stat.period !== FINAL_PERIOD);
   if (badPeriod) {

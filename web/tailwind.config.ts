@@ -34,12 +34,22 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
-        mono: ["var(--font-geist-mono)", "monospace"],
+        sans: ["var(--font-sans)", "ui-sans-serif", "sans-serif"],
+        display: ["var(--font-display)", "ui-sans-serif", "sans-serif"],
+        mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
       },
       boxShadow: {
         card: "0 1px 0 0 rgba(255,255,255,0.04) inset, 0 8px 24px -12px rgba(0,0,0,0.6)",
         glow: "0 0 24px -6px rgba(34,197,94,0.45)",
+      },
+      keyframes: {
+        "pulse-dot": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.35" },
+        },
+      },
+      animation: {
+        "pulse-dot": "pulse-dot 1.6s ease-in-out infinite",
       },
     },
   },

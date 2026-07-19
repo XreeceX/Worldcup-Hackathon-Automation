@@ -45,7 +45,17 @@ test('conditionLabel: template 1 falls back to generic names', () => {
 });
 
 test('conditionLabel: unknown template', () => {
-  assert.equal(conditionLabel(7, 0, 'A', 'B'), 'Unknown condition');
+  assert.equal(conditionLabel(99, 0, 'A', 'B'), 'Unknown condition');
+});
+
+test('conditionLabel: templates 2–7', () => {
+  assert.equal(conditionLabel(2, 0), 'Draw (full time)');
+  assert.equal(conditionLabel(3, 2, 'Spain', 'Argentina'), 'Spain scores at least 2');
+  assert.equal(conditionLabel(3, 256 + 3, 'Spain', 'Argentina'), 'Argentina scores at least 3');
+  assert.equal(conditionLabel(4, 4), 'Total goals ≥ 4');
+  assert.equal(conditionLabel(5, 256 + 2, 'Spain', 'Argentina'), 'Argentina wins by ≥ 2');
+  assert.equal(conditionLabel(6, 0, 'Spain', 'Argentina'), 'Spain wins on penalties');
+  assert.equal(conditionLabel(7, 0), 'Goes to penalties');
 });
 
 test('decodeName: strips trailing nulls', () => {
@@ -136,6 +146,9 @@ test('fixtureBucket: upcoming / live / finished', () => {
   assert.equal(fixtureBucket(2, now - 1_000, now), 'live'); // H1
   assert.equal(fixtureBucket(5, now - 7_200_000, now), 'finished'); // Ended
   assert.equal(fixtureBucket(16, now + 3_600_000, now), 'finished'); // Cancelled
-  // stale game_state 0 with kickoff far in the past → finished, not live
+  // stale game_state 0 past est. FT (~105m) → finished, not live
+  assert.equal(fixtureBucket(0, now - 2 * 3_600_000, now), 'finished');
   assert.equal(fixtureBucket(0, now - 6 * 3_600_000, now), 'finished');
+  // explicit in-play after est. FT still live (ET / pens)
+  assert.equal(fixtureBucket(8, now - 2 * 3_600_000, now), 'live');
 });

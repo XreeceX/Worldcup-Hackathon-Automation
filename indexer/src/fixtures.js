@@ -23,10 +23,10 @@ async function renewJwt() {
   console.log('[fixtures] JWT renewed');
 }
 
-async function fetchSnapshot() {
+async function fetchSnapshot(competitionId) {
   const url =
     `${config.txline.origin}/api/fixtures/snapshot` +
-    `?competitionId=${config.txline.competitionId}&startEpochDay=${config.txline.startEpochDay}`;
+    `?competitionId=${competitionId}&startEpochDay=${config.txline.startEpochDay}`;
   const doGet = () =>
     axios.get(url, {
       headers: { Authorization: `Bearer ${jwt}`, 'X-Api-Token': apiToken },
@@ -43,6 +43,13 @@ async function fetchSnapshot() {
   }
 }
 
+function unwrapRecords(data) {
+  const records = Array.isArray(data)
+    ? data
+    : data?.fixtures ?? data?.data ?? data?.records ?? [];
+  return Array.isArray(records) ? records : null;
+}
+
 /** One refresh pass. Returns the number of fixtures upserted. */
 export async function refreshFixtures() {
   if (!jwt || !apiToken) loadCredsFromDisk();
@@ -53,24 +60,44 @@ export async function refreshFixtures() {
     return 0;
   }
 
-  const data = await fetchSnapshot();
-  // Snapshot shape is not pinned down — accept a bare array or common wrappers.
-  const records = Array.isArray(data)
-    ? data
-    : data?.fixtures ?? data?.data ?? data?.records ?? [];
-  if (!Array.isArray(records)) {
-    console.warn('[fixtures] unexpected snapshot shape:', JSON.stringify(data).slice(0, 300));
-    return 0;
-  }
+  const competitionIds = config.txline.competitionIds?.length
+    ? config.txline.competitionIds
+    : [config.txline.competitionId];
 
   let count = 0;
-  for (const raw of records) {
-    const f = mapFixtureRecord(raw);
-    if (!f) continue;
-    await upsertFixture(f);
-    count++;
+  let total = 0;
+  for (const competitionId of competitionIds) {
+    let data;
+    try {
+      data = await fetchSnapshot(competitionId);
+    } catch (err) {
+      console.warn(
+        `[fixtures] snapshot competitionId=${competitionId} failed:`,
+        err.response?.status ?? err.message
+      );
+      continue;
+    }
+    const records = unwrapRecords(data);
+    if (!records) {
+      console.warn(
+        `[fixtures] unexpected snapshot shape for competitionId=${competitionId}:`,
+        JSON.stringify(data).slice(0, 200)
+      );
+      continue;
+    }
+    total += records.length;
+    for (const raw of records) {
+      const f = mapFixtureRecord(raw);
+      if (!f) continue;
+      // Prefer explicit competition names from TxLINE; fall back by id.
+      if (!f.competition || f.competition === 'Unknown') {
+        f.competition = competitionId === 72 ? 'World Cup' : competitionId === 430 ? 'Friendlies' : f.competition;
+      }
+      await upsertFixture(f);
+      count++;
+    }
   }
-  console.log(`[fixtures] upserted ${count}/${records.length} fixtures`);
+  console.log(`[fixtures] upserted ${count}/${total} fixtures (competitions: ${competitionIds.join(',')})`);
   return count;
 }
 

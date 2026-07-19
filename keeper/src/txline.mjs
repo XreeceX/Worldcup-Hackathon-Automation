@@ -94,6 +94,10 @@ export function createTxlineClient({ jwt, apiToken }) {
     return (await apiClient.get(`/scores/historical/${fixtureId}`)).data;
   }
 
+  async function getScoresSnapshot(fixtureId) {
+    return (await apiClient.get(`/scores/snapshot/${fixtureId}`)).data;
+  }
+
   async function getScoresUpdates(epochDay, hour, interval) {
     return (await apiClient.get(`/scores/updates/${epochDay}/${hour}/${interval}`)).data;
   }
@@ -198,6 +202,7 @@ export function createTxlineClient({ jwt, apiToken }) {
     getFixtureUpdates,
     getFixtureValidation,
     getScoresHistorical,
+    getScoresSnapshot,
     getScoresUpdates,
     getStatValidation,
     subscribeScores,

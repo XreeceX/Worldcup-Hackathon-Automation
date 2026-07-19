@@ -175,7 +175,10 @@ test('game_finalised filter (BUG-01): only action=game_finalised with statusId=1
   assert.equal(isFinalisedEvent(undefined), false);
 });
 
-test('statKeysForTemplate: both templates prove [1,2]', () => {
+test('statKeysForTemplate: goals vs pens', () => {
   assert.deepEqual(statKeysForTemplate(0), [1, 2]);
   assert.deepEqual(statKeysForTemplate(1), [1, 2]);
+  assert.deepEqual(statKeysForTemplate(5), [1, 2]);
+  assert.deepEqual(statKeysForTemplate(6), [6001, 6002]);
+  assert.deepEqual(statKeysForTemplate(7), [6001, 6002]);
 });
