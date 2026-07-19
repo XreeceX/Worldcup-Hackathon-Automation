@@ -61,6 +61,12 @@ pub mod commitment {
             EngineError::MatchWindowClosed
         );
         require!(deposit_lamports >= MIN_DEPOSIT_LAMPORTS, EngineError::DepositTooSmall);
+        // Beneficiary must be someone else — pledges are commitments to a cause/peer, not self-payouts.
+        require_keys_neq!(
+            beneficiary,
+            ctx.accounts.founder.key(),
+            EngineError::SelfBeneficiary
+        );
         // nonce is part of the PDA seeds (multiple pledges per wallet/fixture).
         let _ = nonce;
 
@@ -879,6 +885,8 @@ pub enum EngineError {
     WrongRootsAccount,
     #[msg("Beneficiary account does not match commitment")]
     WrongBeneficiary,
+    #[msg("Beneficiary cannot be your own wallet")]
+    SelfBeneficiary,
     #[msg("Not the TxLINE oracle program")]
     WrongOracleProgram,
     #[msg("Fixture is not cancelled")]

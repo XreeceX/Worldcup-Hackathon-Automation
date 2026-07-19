@@ -180,11 +180,23 @@ export function CreateCommitmentForm({
 
   const beneficiaryValid = useMemo(() => {
     try {
-      return beneficiary.length > 0 && Boolean(new PublicKey(beneficiary));
+      if (!beneficiary) return false;
+      const pk = new PublicKey(beneficiary);
+      if (publicKey && pk.equals(publicKey)) return false;
+      return true;
     } catch {
       return false;
     }
-  }, [beneficiary]);
+  }, [beneficiary, publicKey]);
+
+  const beneficiaryIsSelf = useMemo(() => {
+    if (!publicKey || !beneficiary) return false;
+    try {
+      return new PublicKey(beneficiary).equals(publicKey);
+    } catch {
+      return false;
+    }
+  }, [beneficiary, publicKey]);
 
   const amountNum = Number(amount);
   const amountValid = Number.isFinite(amountNum) && amountNum >= MIN_DEPOSIT_SOL;
@@ -437,7 +449,11 @@ export function CreateCommitmentForm({
               spellCheck={false}
             />
             {beneficiary && !beneficiaryValid && (
-              <p className="mt-1.5 text-xs text-red-400">Not a valid Solana address.</p>
+              <p className="mt-1.5 text-xs text-red-400">
+                {beneficiaryIsSelf
+                  ? 'Beneficiary cannot be your own wallet — pick a cause or another address.'
+                  : 'Not a valid Solana address.'}
+              </p>
             )}
             {beneficiaryValid && (
               <a

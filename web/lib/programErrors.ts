@@ -21,6 +21,7 @@ export function programErrorMessage(err: unknown): string {
     [/NotRefundable/, 'Nothing to claim on this commitment.'],
     [/NotOpen/, 'This commitment has already been settled.'],
     [/WrongBeneficiary/, 'Beneficiary mismatch — cannot settle this commitment.'],
+    [/SelfBeneficiary/, 'Beneficiary cannot be your own wallet.'],
     [/ConditionTemplateInvalid/, 'That condition type is not supported on-chain.'],
     [/ConstraintSeeds|seeds constraint/i, 'Account mismatch — refresh and try again (program may need redeploy).'],
     [/insufficient|0 SOL|no record of a prior credit/i, 'Not enough Devnet SOL. Top up at faucet.solana.com.'],
