@@ -7,8 +7,8 @@ import { EmptyState } from '@/components/EmptyState';
 import { FixtureHeader } from '@/components/FixtureHeader';
 import { MatchDetails } from '@/components/MatchDetails';
 import { useLiveScore } from '@/hooks/useLiveScore';
-import { fetchFixtures } from '@/lib/api';
-import type { Fixture } from '@/lib/types';
+import { fetchBoard, fetchFixtures } from '@/lib/api';
+import type { BoardCommitment, Fixture } from '@/lib/types';
 
 /** Match centre for one fixture — pledges live on the Board (`/`). */
 export default function FixturePage() {
@@ -16,8 +16,24 @@ export default function FixturePage() {
   const fixtureId = Number(params.id);
 
   const [fixture, setFixture] = useState<Fixture | null>(null);
+  const [pledges, setPledges] = useState<BoardCommitment[] | null>(null);
   const [loading, setLoading] = useState(true);
   const live = useLiveScore(Number.isFinite(fixtureId) ? fixtureId : null);
+
+  useEffect(() => {
+    if (!Number.isFinite(fixtureId)) return;
+    let cancelled = false;
+    fetchBoard({ fixtureId, limit: 200 })
+      .then((rows) => {
+        if (!cancelled) setPledges(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setPledges(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fixtureId]);
 
   useEffect(() => {
     if (!Number.isFinite(fixtureId)) return;
@@ -60,6 +76,7 @@ export default function FixturePage() {
           fixture={effectiveFixture}
           score={live.score}
           hasData={live.hasData}
+          pledges={pledges ?? undefined}
         />
       ) : (
         <EmptyState

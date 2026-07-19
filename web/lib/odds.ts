@@ -44,20 +44,26 @@ export function condenseOddsSnapshot(rows: unknown): MarketOdds {
     const ts = Number(r.Ts ?? r.ts ?? r.AsOf ?? r.asOf);
     if (Number.isFinite(ts)) asOf = asOf == null ? ts : Math.max(asOf, ts);
 
-    const marketType = String(r.MarketType ?? r.marketType ?? '');
+    // TxLINE snapshots name the market in SuperOddsType (e.g.
+    // "1X2_PARTICIPANT_RESULT", "OVERUNDER_PARTICIPANT_GOALS").
+    const marketType = String(
+      r.MarketType ?? r.marketType ?? r.SuperOddsType ?? r.superOddsType ?? '',
+    );
     const period = r.MarketPeriod ?? r.marketPeriod;
+    // Full-match markets have no period; "half=1" rows must not leak in.
+    const fullTime = period == null || period === '';
     const params = String(r.MarketParameters ?? r.marketParameters ?? '');
     const pcts = (r.Pct ?? r.pct) as unknown[];
     const names = (r.PriceNames ?? r.priceNames) as unknown[];
     if (!Array.isArray(pcts)) continue;
 
-    if (marketType.includes('1X2') && (period == null || period === '')) {
+    if (marketType.includes('1X2') && fullTime) {
       out.homeWinPct = parsePct(pcts[0]);
       out.drawPct = parsePct(pcts[1]);
       out.awayWinPct = parsePct(pcts[2]);
     }
 
-    if (marketType.includes('OVERUNDER')) {
+    if (marketType.includes('OVERUNDER') && fullTime) {
       const lineMatch = params.match(/line=([0-9.]+)/i);
       if (!lineMatch) continue;
       const line = lineMatch[1];

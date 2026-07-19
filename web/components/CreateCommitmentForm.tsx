@@ -186,11 +186,21 @@ export function CreateCommitmentForm({
     }
   }, [beneficiary]);
 
+  /** A pledge pays someone else — block routing the vault back to the pledger. */
+  const beneficiaryIsSelf = useMemo(() => {
+    if (!beneficiaryValid || !publicKey) return false;
+    try {
+      return new PublicKey(beneficiary).equals(publicKey);
+    } catch {
+      return false;
+    }
+  }, [beneficiaryValid, beneficiary, publicKey]);
+
   const amountNum = Number(amount);
   const amountValid = Number.isFinite(amountNum) && amountNum >= MIN_DEPOSIT_SOL;
   const nameBytes = utf8ByteLength(name || defaultName);
   const nameValid = nameBytes <= 64;
-  const step2Valid = beneficiaryValid && amountValid && nameValid;
+  const step2Valid = beneficiaryValid && !beneficiaryIsSelf && amountValid && nameValid;
   const step1Valid = template != null;
 
   function pickTemplate(opt: ConditionOption) {
@@ -439,7 +449,13 @@ export function CreateCommitmentForm({
             {beneficiary && !beneficiaryValid && (
               <p className="mt-1.5 text-xs text-red-400">Not a valid Solana address.</p>
             )}
-            {beneficiaryValid && (
+            {beneficiaryIsSelf && (
+              <p className="mt-1.5 text-xs text-red-400">
+                That&apos;s your connected wallet. A pledge pays someone else —
+                enter the recipient&apos;s address, not your own.
+              </p>
+            )}
+            {beneficiaryValid && !beneficiaryIsSelf && (
               <a
                 href={explorerAddressUrl(beneficiary)}
                 target="_blank"

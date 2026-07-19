@@ -23,7 +23,7 @@ function useMemberEntry(commitment: OnChainCommitment) {
 }
 
 export function JoinButton({ commitment, onChanged }: ActionProps) {
-  const { connected } = useWallet();
+  const { connected, publicKey } = useWallet();
   const { setVisible } = useWalletModal();
   const escrow = useEscrow();
   const entry = useMemberEntry(commitment);
@@ -38,6 +38,14 @@ export function JoinButton({ commitment, onChanged }: ActionProps) {
     return (
       <p className="text-xs text-muted">
         You withdrew from this commitment — rejoining is not allowed.
+      </p>
+    );
+  }
+  if (publicKey && publicKey.toBase58() === commitment.beneficiary) {
+    return (
+      <p className="text-xs text-muted">
+        This wallet is the beneficiary — a pledge pays someone else, so the
+        beneficiary can&apos;t pledge into its own commitment.
       </p>
     );
   }

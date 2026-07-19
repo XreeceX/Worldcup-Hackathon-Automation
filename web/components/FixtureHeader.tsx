@@ -6,19 +6,21 @@ import {
   isMatchEnded,
   isPledgeResultsPending,
 } from '@/lib/fixtures';
-import { formatKickoff } from '@/lib/format';
+import { formatKickoff, formatSol } from '@/lib/format';
 import { periodLabel } from '@/lib/matchData';
 import { enrichFixtureMeta } from '@/lib/wcSchedule';
-import type { Fixture, LiveScoreState } from '@/lib/types';
+import type { BoardCommitment, Fixture, LiveScoreState } from '@/lib/types';
 
 export function FixtureHeader({
   fixture,
   score,
   hasData,
+  pledges,
 }: {
   fixture: Fixture;
   score?: LiveScoreState;
   hasData?: boolean;
+  pledges?: BoardCommitment[];
 }) {
   const now = Date.now();
   const upcoming = now < fixture.kickoffTs;
@@ -35,6 +37,19 @@ export function FixtureHeader({
   };
   const ended = isMatchEnded(fixture, scoreOpts, now);
   const resultsPending = isPledgeResultsPending(fixture, scoreOpts, now);
+
+  const pledgeStats = pledges
+    ? pledges.reduce(
+        (acc, p) => {
+          acc.count += 1;
+          acc.pledgedLamports += p.totalLamports;
+          if (p.status === 'Executed') acc.paidOutLamports += p.totalLamports;
+          if (p.status === 'Refunded') acc.refundedLamports += p.totalLamports;
+          return acc;
+        },
+        { count: 0, pledgedLamports: 0, paidOutLamports: 0, refundedLamports: 0 },
+      )
+    : null;
 
   return (
     <section className="card mb-6 overflow-hidden">
@@ -84,6 +99,27 @@ export function FixtureHeader({
             </span>
           )}
         </div>
+
+        {pledgeStats && (
+          <div className="relative mt-5 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-raised/60 px-2.5 py-1 text-muted">
+              🤝 {pledgeStats.count} pledge{pledgeStats.count === 1 ? '' : 's'}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-raised/60 px-2.5 py-1 text-muted">
+              ◎ {formatSol(pledgeStats.pledgedLamports)} SOL pledged
+            </span>
+            {ended && (
+              <>
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-pitch-600/40 bg-pitch-500/15 px-2.5 py-1 text-pitch-400">
+                  ✓ {formatSol(pledgeStats.paidOutLamports)} SOL paid out
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2.5 py-1 text-rose-300">
+                  ↩ {formatSol(pledgeStats.refundedLamports)} SOL refunded
+                </span>
+              </>
+            )}
+          </div>
+        )}
 
         {(ended || resultsPending) && (
           <div
