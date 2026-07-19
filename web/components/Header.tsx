@@ -18,6 +18,7 @@ const ConnectMenu = dynamic(
 
 const NAV = [
   { href: '/', label: 'Board' },
+  { href: '/mine', label: 'My pledges' },
   { href: '/claims', label: 'Claims' },
 ];
 
