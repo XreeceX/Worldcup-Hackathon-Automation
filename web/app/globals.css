@@ -3,111 +3,124 @@
 @tailwind utilities;
 
 :root {
-  /* surfaces */
-  --pitch-950: #07090c;
-  --pitch-900: #0c1014;
-  --pitch-800: #12181f;
-  --pitch-700: #1a222b;
-  --line-600: #26303b;
-  /* text */
-  --chalk-100: #f2f5f7;
-  --chalk-400: #96a3b0;
-  --chalk-600: #5c6975;
-  /* live accent */
-  --turf-400: #34e27a;
-  --turf-500: #17c964;
-  --turf-glow: rgba(23, 201, 100, 0.35);
-  /* settlement gold */
-  --gold-400: #f5c044;
-  --gold-glow: rgba(245, 192, 68, 0.3);
-  /* states */
-  --void-400: #8b93ff;
-  --loss-400: #ff6b6b;
-  --info-400: #4da3ff;
+  /* RGB channel triplets so Tailwind opacity modifiers work */
+  --bg: 8 12 9;
+  --surface: 14 20 14;
+  --raised: 20 28 19;
+  --edge: 38 52 34;
+  --ink: 240 247 239;
+  --muted: 140 162 138;
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
-  color: var(--chalk-100);
-  background-color: var(--pitch-950);
+  color: rgb(var(--ink));
+  background-color: rgb(var(--bg));
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255, 255, 255, 0.04), transparent),
-    linear-gradient(to right, rgba(38, 48, 59, 0.08) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(38, 48, 59, 0.08) 1px, transparent 1px);
-  background-size: 100% 100%, 48px 48px, 48px 48px;
-  min-height: 100vh;
+    radial-gradient(ellipse 90% 50% at 15% -10%, rgba(34, 197, 94, 0.14), transparent 55%),
+    radial-gradient(ellipse 70% 40% at 90% 0%, rgba(34, 197, 94, 0.06), transparent 50%),
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      transparent calc(100% - 1px),
+      rgba(34, 197, 94, 0.04) 100%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 79px,
+      rgba(34, 197, 94, 0.03) 79px,
+      rgba(34, 197, 94, 0.03) 80px
+    );
+  background-attachment: fixed;
+  min-height: 100dvh;
 }
 
-.mono {
-  font-family: var(--font-mono), monospace;
-  font-variant-numeric: tabular-nums;
-}
-.display {
-  font-family: var(--font-display), sans-serif;
-}
-.label {
-  font-family: var(--font-display), sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.75rem;
-  color: var(--chalk-600);
+::selection {
+  background: rgba(34, 197, 94, 0.35);
 }
 
-/* live pulse dot */
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-  background: var(--turf-500);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--turf-glow); }
-  50% { box-shadow: 0 0 0 6px transparent; }
+@layer components {
+  .app-pad {
+    @apply px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12;
+  }
+
+  .app-main {
+    @apply app-pad py-5 sm:py-6 lg:py-7;
+  }
+
+  .font-display {
+    font-family: var(--font-display), ui-sans-serif, sans-serif;
+  }
+
+  .card {
+    @apply rounded-2xl border border-edge bg-surface/90 shadow-card backdrop-blur-sm;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-primary {
+    @apply btn bg-pitch-500 text-pitch-950 hover:bg-pitch-400;
+  }
+
+  .btn-secondary {
+    @apply btn border border-edge bg-raised text-ink hover:border-pitch-700 hover:bg-raised/80;
+  }
+
+  .btn-danger {
+    @apply btn border border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-edge bg-raised px-3.5 py-2.5 text-sm text-ink placeholder:text-muted/60 focus:border-pitch-600 focus:outline-none focus:ring-1 focus:ring-pitch-600;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted;
+  }
+
+  .panel {
+    @apply rounded-2xl border border-edge bg-surface/70 p-4 shadow-card backdrop-blur-sm sm:p-5;
+  }
+
+  .fade-up {
+    animation: fade-up 0.45s ease-out both;
+  }
 }
 
-/* card flash on live update */
-@keyframes flash {
-  0% { box-shadow: 0 0 0 2px var(--turf-glow); }
-  100% { box-shadow: 0 0 0 2px transparent; }
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-.flash { animation: flash 0.8s ease-out; }
 
-/* ticker marquee */
 @keyframes marquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
+
 .marquee {
   animation: marquee 40s linear infinite;
 }
-.marquee:hover { animation-play-state: paused; }
 
-/* receipt perforation — notches along the top edge, like a torn ticket */
-.receipt-edge {
-  -webkit-mask-image: radial-gradient(circle 5px at 12px 0, transparent 5px, black 5.5px);
-  -webkit-mask-size: 24px 100%;
-  -webkit-mask-repeat: repeat-x;
-  mask-image: radial-gradient(circle 5px at 12px 0, transparent 5px, black 5.5px);
-  mask-size: 24px 100%;
-  mask-repeat: repeat-x;
+/* Wallet adapter modal — high z-index so it isn't trapped under sticky header */
+.wallet-adapter-modal-wrapper {
+  z-index: 10000 !important;
 }
-
-/* wallet adapter restyle */
-.wallet-adapter-button {
-  background: var(--pitch-700) !important;
-  border: 1px solid var(--line-600) !important;
-  border-radius: 8px !important;
-  font-family: var(--font-mono), monospace !important;
-  font-size: 0.85rem !important;
-  height: 40px !important;
-}
-.wallet-adapter-button:hover {
-  background: var(--line-600) !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.15s !important;
-  }
+.wallet-adapter-modal {
+  z-index: 10001 !important;
 }

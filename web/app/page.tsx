@@ -1,141 +1,282 @@
-"use client";
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { useBoard, useFixtures, useFeed, fixtureLabel } from "@/lib/api";
-import { CommitmentCard } from "@/components/commitment-card";
-import { TxLink } from "@/components/chrome";
-import { fmtSol, truncate } from "@/lib/config";
+'use client';
 
-const FILTERS = ["All", "Live", "Upcoming", "Settled"] as const;
+import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { DelayedDataBanner } from '@/components/Banner';
+import type { SortKey } from '@/components/BoardSort';
+import { CommitmentCard } from '@/components/CommitmentCard';
+import { CreateCommitmentForm } from '@/components/CreateCommitmentForm';
+import { EmptyState, LoadingGrid } from '@/components/EmptyState';
+import { FixtureBrowser } from '@/components/FixtureBrowser';
+import { BoardToolbar, type BoardStatusFilter } from '@/components/FixtureFilter';
+import { BoardStats } from '@/components/BoardStats';
+import { LiveFeed } from '@/components/LiveFeed';
+import { useLiveScore } from '@/hooks/useLiveScore';
+import { fetchBoard, fetchFixtures } from '@/lib/api';
+import {
+  canCreatePledge,
+  isKnockoutWorldCupFixture,
+  isMatchEnded,
+  worldCupFixtures,
+} from '@/lib/fixtures';
+import { isKnockoutStage, stageForFixtureId } from '@/lib/wcSchedule';
+import type { BoardCommitment, Fixture } from '@/lib/types';
 
-export default function Board() {
-  const { data: rows, isLoading } = useBoard();
-  const { fixtures } = useFixtures();
-  const feed = useFeed();
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
-  const [sort, setSort] = useState("total_lamports");
+const REFRESH_MS = 20_000;
 
-  const filtered = useMemo(() => {
-    const now = Date.now() / 1000;
-    let r = rows ?? [];
-    if (filter === "Live") r = r.filter((x) => x.status === "Open" && now >= x.kickoffTs);
-    if (filter === "Upcoming") r = r.filter((x) => x.status === "Open" && now < x.kickoffTs);
-    if (filter === "Settled") r = r.filter((x) => x.status !== "Open");
-    const key = sort === "member_count" ? "memberCount" : sort === "kickoff_ts" ? "kickoffTs" : "totalLamports";
-    return [...r].sort((a, b) => (b as never)[key] - (a as never)[key]);
-  }, [rows, filter, sort]);
+export default function BoardPage() {
+  const [commitments, setCommitments] = useState<BoardCommitment[]>([]);
+  const [fixtures, setFixtures] = useState<Fixture[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [indexerDown, setIndexerDown] = useState(false);
 
-  const totals = useMemo(() => {
-    const r = rows ?? [];
-    return {
-      pledged: r.reduce((s, x) => s + x.totalLamports, 0),
-      count: r.length,
-      released: r.filter((x) => x.status === "Executed").reduce((s, x) => s + x.totalLamports, 0),
+  const [fixtureId, setFixtureId] = useState<number | null>(null);
+  const [status, setStatus] = useState<BoardStatusFilter>('Active');
+  const [sort, setSort] = useState<SortKey>('total_lamports');
+
+  const live = useLiveScore(fixtureId);
+
+  const load = useCallback(async () => {
+    const [boardRes, fixturesRes] = await Promise.allSettled([
+      fetchBoard({
+        fixtureId: fixtureId ?? undefined,
+        status: status === 'Active' ? 'Open' : undefined,
+        sort,
+      }),
+      fetchFixtures(),
+    ]);
+    if (boardRes.status === 'fulfilled') {
+      setCommitments(boardRes.value);
+      setIndexerDown(false);
+    } else {
+      setIndexerDown(true);
+    }
+    if (fixturesRes.status === 'fulfilled') setFixtures(fixturesRes.value);
+  }, [fixtureId, status, sort]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    load().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    const timer = setInterval(load, REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
     };
-  }, [rows]);
+  }, [load]);
+
+  const fixtureById = useMemo(
+    () => new Map(fixtures.map((f) => [f.fixtureId, f])),
+    [fixtures],
+  );
+
+  const selectedFixture = useMemo(
+    () => (fixtureId != null ? fixtureById.get(fixtureId) ?? null : null),
+    [fixtureById, fixtureId],
+  );
+
+  const visible = useMemo(() => {
+    let rows = commitments.filter((c) => {
+      const f = fixtureById.get(c.fixtureId);
+      if (f) return isKnockoutWorldCupFixture(f);
+      return isKnockoutStage(stageForFixtureId(c.fixtureId));
+    });
+    if (fixtureId != null) rows = rows.filter((c) => c.fixtureId === fixtureId);
+    if (status === 'Active') rows = rows.filter((c) => c.status === 'Open');
+    if (status === 'Settled') rows = rows.filter((c) => c.status !== 'Open');
+    const sorted = [...rows];
+    if (sort === 'total_lamports') sorted.sort((a, b) => b.totalLamports - a.totalLamports);
+    if (sort === 'member_count') sorted.sort((a, b) => b.memberCount - a.memberCount);
+    if (sort === 'created_at')
+      sorted.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+    return sorted;
+  }, [commitments, fixtureById, fixtureId, status, sort]);
+
+  const showCreateForm = useMemo(() => {
+    if (!selectedFixture) return false;
+    if (!isKnockoutWorldCupFixture(selectedFixture)) return false;
+    if (
+      isMatchEnded(selectedFixture, {
+        finalised: live.score.finalised,
+        statusId: live.score.statusId,
+      })
+    ) {
+      return false;
+    }
+    return canCreatePledge(selectedFixture);
+  }, [selectedFixture, live.score.finalised, live.score.statusId]);
+
+  const firstCreatable = useMemo(() => {
+    return (
+      worldCupFixtures(fixtures)
+        .filter((f) => canCreatePledge(f))
+        .sort((a, b) => a.kickoffTs - b.kickoffTs)[0] ?? null
+    );
+  }, [fixtures]);
+
+  function focusCreate(fixture?: Fixture | null) {
+    const target = fixture ?? firstCreatable;
+    if (!target) return;
+    setFixtureId(target.fixtureId);
+    setStatus('All');
+    requestAnimationFrame(() => {
+      document.getElementById('create-pledge')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
-      <div>
-        {/* hero strip */}
-        <div className="flex flex-wrap items-end justify-between gap-4 py-4">
+    <div className="flex min-h-[calc(100dvh-8.5rem)] flex-col">
+      <section className="fade-up relative mb-6 overflow-hidden rounded-2xl border border-edge/70 bg-surface/40 px-5 py-6 sm:px-8 sm:py-8">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(34,197,94,0.18),transparent_55%)]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-8 top-0 h-full w-1/2 opacity-30"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(-12deg, transparent, transparent 14px, rgba(34,197,94,0.12) 14px, rgba(34,197,94,0.12) 15px)',
+          }}
+        />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="display text-3xl font-extrabold">Put it on the line.</h1>
-            <p className="mt-1 max-w-md text-sm text-chalk-400">
-              Conditional pledges, settled by the final whistle. No bookmaker. No committee. Just proof.
+            <p className="font-display text-sm font-bold uppercase tracking-[0.2em] text-pitch-400">
+              PledgePitch
+            </p>
+            <h1 className="mt-1 font-display text-4xl font-extrabold uppercase leading-[0.95] tracking-wide sm:text-5xl lg:text-6xl">
+              Back your call.
+              <span className="block text-pitch-400">On-chain.</span>
+            </h1>
+            <p className="mt-3 max-w-xl text-sm text-muted sm:text-base">
+              Lock a knockout World Cup pledge. At full time, TxLINE settles it —
+              paid out if your call lands, refunded if not.
             </p>
           </div>
-          <div className="flex gap-6">
-            <Stat label="On the line" value={fmtSol(totals.pledged)} />
-            <Stat label="Commitments" value={String(totals.count)} />
-            <Stat label="Released to causes" value={fmtSol(totals.released)} gold />
-          </div>
-        </div>
-
-        {/* filter bar */}
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-line-600 bg-pitch-800 p-0.5">
-            {FILTERS.map((f) => (
+          <div className="flex flex-col items-stretch gap-4 sm:items-end">
+            <BoardStats rows={commitments} />
+            {firstCreatable ? (
               <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
-                  filter === f ? "bg-pitch-700 text-chalk-100" : "text-chalk-400 hover:text-chalk-100"
-                }`}
+                type="button"
+                onClick={() => focusCreate(firstCreatable)}
+                className="btn-primary shrink-0 px-6 py-3 text-sm font-bold"
               >
-                {f}
+                Create a pledge
               </button>
-            ))}
+            ) : null}
           </div>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="ml-auto rounded-lg border border-line-600 bg-pitch-800 px-3 py-1.5 text-xs text-chalk-400"
-          >
-            <option value="total_lamports">Biggest pledge</option>
-            <option value="member_count">Most members</option>
-            <option value="kickoff_ts">Kickoff time</option>
-          </select>
         </div>
+      </section>
 
-        {/* grid */}
-        {isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-44 animate-pulse rounded-xl border border-line-600 bg-pitch-800" />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-line-600 bg-pitch-900 p-12 text-center">
-            <p className="display text-xl text-chalk-400">No pledges yet. The board is waiting.</p>
-            <Link
-              href="/matches"
-              className="mt-4 inline-block rounded-lg bg-turf-500 px-5 py-2.5 font-semibold text-pitch-950"
-            >
-              Make the first vow
-            </Link>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((row, i) => (
-              <CommitmentCard key={row.pubkey} row={row} fixtures={fixtures} index={i} />
-            ))}
-          </div>
-        )}
-      </div>
+      <DelayedDataBanner visible={indexerDown} />
 
-      {/* feed rail */}
-      <aside className="hidden xl:block">
-        <div className="label mb-3">Settlement feed</div>
-        <div className="flex flex-col gap-2">
-          {feed.length === 0 && (
-            <p className="text-sm text-chalk-600">Resolutions appear here in real time.</p>
+      <div className="grid flex-1 gap-6 xl:grid-cols-[minmax(18rem,26rem)_minmax(0,1fr)] xl:gap-8 2xl:grid-cols-[minmax(20rem,28rem)_minmax(0,1fr)]">
+        <aside className="fade-up min-w-0 xl:sticky xl:top-[4.5rem] xl:max-h-[calc(100dvh-5.5rem)] xl:overflow-y-auto xl:self-start xl:[animation-delay:60ms]">
+          <FixtureBrowser
+            fixtures={fixtures}
+            compact
+            onSelectFixture={(id) => {
+              setFixtureId(id);
+              setStatus('All');
+            }}
+          />
+        </aside>
+
+        <section id="pledge-board" className="fade-up scroll-mt-20 min-w-0 xl:[animation-delay:120ms]">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-extrabold uppercase tracking-wide">
+                Pledge board
+              </h2>
+              <p className="mt-0.5 text-sm text-muted">
+                Existing pledges for the selected match — create one if the board is empty.
+              </p>
+            </div>
+          </div>
+
+          <div className="mb-5">
+            <BoardToolbar
+              fixtures={fixtures}
+              fixtureId={fixtureId}
+              status={status}
+              sort={sort}
+              onFixtureChange={setFixtureId}
+              onStatusChange={setStatus}
+              onSortChange={setSort}
+              resultCount={visible.length}
+            />
+          </div>
+
+          {loading ? (
+            <LoadingGrid />
+          ) : visible.length === 0 ? (
+            <EmptyState
+              title={indexerDown ? 'Board unavailable' : 'No pledges yet'}
+              body={
+                indexerDown
+                  ? 'The indexer is unreachable. Try again shortly.'
+                  : selectedFixture
+                    ? showCreateForm
+                      ? `Nobody has pledged on ${selectedFixture.homeTeam} vs ${selectedFixture.awayTeam} yet. Create the first one below.`
+                      : 'No pledges on this match.'
+                    : status === 'Active'
+                      ? 'No open pledges. Pick a Coming soon match, then create one.'
+                      : 'No pledges match these filters.'
+              }
+              action={
+                !selectedFixture && firstCreatable ? (
+                  <button
+                    type="button"
+                    onClick={() => focusCreate(firstCreatable)}
+                    className="btn-primary"
+                  >
+                    Pick a match & create
+                  </button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+              {visible.map((c) => (
+                <CommitmentCard
+                  key={c.pubkey}
+                  commitment={c}
+                  fixture={fixtureById.get(c.fixtureId)}
+                />
+              ))}
+            </div>
           )}
-          {feed.map((e, i) => {
-            const f = fixtureLabel(fixtures, e.fixtureId);
-            return (
-              <div key={i} className="rounded-lg border border-line-600 bg-pitch-800 p-3 text-xs">
-                <div className={e.conditionMet ? "font-semibold text-gold-400" : "text-chalk-400"}>
-                  {e.conditionMet ? "RELEASED" : "NOT MET"} · {e.name || "pledge"}
-                </div>
-                <div className="mt-0.5 text-chalk-400">
-                  {f.home} vs {f.away} · → {truncate(e.beneficiary)}
-                </div>
-                {e.txSig && <div className="mt-1"><TxLink sig={e.txSig}>explorer ↗</TxLink></div>}
-              </div>
-            );
-          })}
-        </div>
-      </aside>
-    </div>
-  );
-}
 
-function Stat({ label, value, gold }: { label: string; value: string; gold?: boolean }) {
-  return (
-    <div className="text-right">
-      <div className="label">{label}</div>
-      <div className={`mono text-xl font-semibold ${gold ? "text-gold-400" : ""}`}>{value}</div>
+          {showCreateForm && selectedFixture && (
+            <div id="create-pledge" className="mt-6 scroll-mt-24 w-full max-w-xl">
+              <CreateCommitmentForm
+                fixture={selectedFixture}
+                matchFinalised={live.score.finalised}
+                statusId={live.score.statusId}
+              />
+            </div>
+          )}
+
+          {!showCreateForm && selectedFixture && visible.length > 0 && (
+            <p className="mt-4 text-sm text-muted">
+              Creating is closed for this match.{' '}
+              <Link
+                href={`/fixture/${selectedFixture.fixtureId}`}
+                className="font-semibold text-pitch-400 hover:underline"
+              >
+                Open match centre →
+              </Link>
+            </p>
+          )}
+
+          <LiveFeed />
+        </section>
+      </div>
     </div>
   );
 }

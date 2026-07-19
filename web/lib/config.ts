@@ -1,25 +1,36 @@
-export const KEEPER_URL = process.env.NEXT_PUBLIC_KEEPER_URL ?? "http://localhost:3001";
-export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL ?? "https://api.devnet.solana.com";
-export const CLUSTER_PARAM = "?cluster=devnet";
+export const RPC_URL =
+  process.env.NEXT_PUBLIC_RPC_URL ?? 'https://api.devnet.solana.com';
 
-export const explorerTx = (sig: string) => `https://explorer.solana.com/tx/${sig}${CLUSTER_PARAM}`;
-export const explorerAddr = (addr: string) => `https://explorer.solana.com/address/${addr}${CLUSTER_PARAM}`;
+export const PROGRAM_ID =
+  process.env.NEXT_PUBLIC_PROGRAM_ID ??
+  '3uyiF93zMvUcP2o1Cqnt2iS4bXwYeBcTMTvbaTf5B3RJ';
 
-export const truncate = (s: string, n = 4) => (s.length > 2 * n + 1 ? `${s.slice(0, n)}…${s.slice(-n)}` : s);
+/**
+ * Backend base URLs.
+ * - Local: set NEXT_PUBLIC_* to http://localhost:3002 / :3001 in .env.local
+ * - Vercel: leave unset → same-origin Next.js /api/* BFF (mirrors indexer+keeper)
+ */
+const onVercel = Boolean(process.env.NEXT_PUBLIC_VERCEL_ENV);
 
-export const lamportsToSol = (l: number) => l / 1_000_000_000;
-export const fmtSol = (l: number) =>
-  `${lamportsToSol(l).toLocaleString(undefined, { maximumFractionDigits: 3 })} SOL`;
+export const INDEXER_URL =
+  process.env.NEXT_PUBLIC_INDEXER_URL ??
+  (onVercel ? '' : 'http://localhost:3002');
 
-// Fixture metadata fallback for fixtures not in the live snapshot (e.g. the
-// finished replay fixture). Team names only — no licensed marks.
-export const FIXTURES_EXTRA: Record<number, { home: string; away: string; startTime: number }> = {
-  18241006: { home: "England", away: "Argentina", startTime: 1784142000000 },
-};
+export const KEEPER_URL =
+  process.env.NEXT_PUBLIC_KEEPER_URL ??
+  (onVercel ? '' : 'http://localhost:3001');
 
-export const FLAGS: Record<string, string> = {
-  England: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", Argentina: "🇦🇷", France: "🇫🇷", Spain: "🇪🇸", Brazil: "🇧🇷",
-  Australia: "🇦🇺", "New Zealand": "🇳🇿", India: "🇮🇳", Vietnam: "🇻🇳", Myanmar: "🇲🇲",
-  Liechtenstein: "🇱🇮", Gibraltar: "🇬🇮",
-};
-export const flag = (team: string) => FLAGS[team] ?? "⚽";
+export const MIN_DEPOSIT_SOL = 0.01;
+export const MIN_DEPOSIT_LAMPORTS = 10_000_000;
+export const MAX_NAME_BYTES = 64;
+export const TIMEOUT_SECONDS = 7 * 86_400;
+/** Create/join allowed through kickoff + this window (mirrors on-chain). */
+export const MATCH_WINDOW_SECONDS = 3.5 * 60 * 60;
+
+export function explorerTxUrl(sig: string): string {
+  return `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
+}
+
+export function explorerAddressUrl(address: string): string {
+  return `https://explorer.solana.com/address/${address}?cluster=devnet`;
+}

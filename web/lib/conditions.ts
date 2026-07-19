@@ -1,50 +1,284 @@
-// Human-language layer over condition templates. Mirrors the on-chain
-// build_strategy mapping — template/param are the only inputs.
 export const TEMPLATE_BTTS = 0;
 export const TEMPLATE_TEAM_WINS = 1;
-export const TEMPLATE_TOTAL_GOALS = 2;
+export const TEMPLATE_DRAW = 2;
+export const TEMPLATE_TEAM_SCORES_AT_LEAST = 3;
+export const TEMPLATE_TOTAL_GOALS_AT_LEAST = 4;
+export const TEMPLATE_WINS_BY_AT_LEAST = 5;
+export const TEMPLATE_WINS_ON_PENS = 6;
+export const TEMPLATE_GOES_TO_PENS = 7;
 
-export function conditionLabel(template: number, param: number, home: string, away: string): string {
-  switch (template) {
-    case TEMPLATE_BTTS: return "Both teams score";
-    case TEMPLATE_TEAM_WINS: return param === 0 ? `${home} wins` : `${away} wins`;
-    case TEMPLATE_TOTAL_GOALS: return `${param}+ goals in the match`;
-    default: return "Unknown condition";
-  }
+export const GOALS_DISCLOSURE =
+  'Full-time goals include extra time. Penalty shootout goals are separate — use a penalties condition for those.';
+
+export const SHOOTOUT_DISCLOSURE =
+  'Wins on goals. Extra time counts. Turn on “Include penalties” to settle on the shootout instead.';
+
+export const PENS_DISCLOSURE =
+  'Uses shootout goals only (stat keys 6001/6002). Full-time and ET goals do not count.';
+
+/** Pack team (0|1) and threshold N into condition_param. */
+export function packTeamThreshold(team: number, n: number): number {
+  return team * 256 + n;
 }
 
-export type LiveStatus = { state: "tracking" | "met"; text: string };
+export function unpackTeamThreshold(param: number): { team: number; n: number } {
+  const team = Math.floor(Number(param) / 256);
+  const n = Number(param) % 256;
+  return { team, n };
+}
 
-// Plain-language live status from current goals (display only — resolution
-// truth always comes from the on-chain proof, FR-15.5).
-export function liveStatus(
-  template: number, param: number, home: string, away: string,
-  g1: number, g2: number, clock: string
-): LiveStatus {
-  const score = `${g1}–${g2}`;
+export type ConditionOption = {
+  template: number;
+  title: string;
+  blurb: string;
+  needsTeam?: boolean;
+  needsThreshold?: boolean;
+  minN?: number;
+  maxN?: number;
+  thresholdLabel?: string;
+  /** Show ET / pens disclosure under the option */
+  disclosure?: 'goals' | 'pens';
+};
+
+export const CONDITION_OPTIONS: ConditionOption[] = [
+  {
+    template: TEMPLATE_BTTS,
+    title: 'Both teams score',
+    blurb: 'Each side scores at least once (ET goals count).',
+    disclosure: 'goals',
+  },
+  {
+    template: TEMPLATE_TEAM_WINS,
+    title: 'Team wins (full time)',
+    blurb: 'Chosen side wins on goals after full time (ET counts). Toggle penalties below if you want the shootout instead.',
+    needsTeam: true,
+    disclosure: 'goals',
+  },
+  {
+    template: TEMPLATE_DRAW,
+    title: 'Draw (full time)',
+    blurb: 'Level on goals after full time including ET. Pens are a separate condition.',
+    disclosure: 'goals',
+  },
+  {
+    template: TEMPLATE_GOES_TO_PENS,
+    title: 'Goes to penalties',
+    blurb: 'Match is decided by a penalty shootout (after a draw through ET).',
+    disclosure: 'pens',
+  },
+  {
+    template: TEMPLATE_TEAM_SCORES_AT_LEAST,
+    title: 'Team scores ≥ N',
+    blurb: 'Chosen side scores at least N goals (ET included).',
+    needsTeam: true,
+    needsThreshold: true,
+    minN: 1,
+    maxN: 8,
+    thresholdLabel: 'Goals',
+    disclosure: 'goals',
+  },
+  {
+    template: TEMPLATE_TOTAL_GOALS_AT_LEAST,
+    title: 'Total goals ≥ N',
+    blurb: 'Combined goals reach at least N (ET included).',
+    needsThreshold: true,
+    minN: 1,
+    maxN: 10,
+    thresholdLabel: 'Total goals',
+    disclosure: 'goals',
+  },
+  {
+    template: TEMPLATE_WINS_BY_AT_LEAST,
+    title: 'Wins by ≥ N',
+    blurb: 'Chosen side wins by at least N goals (ET included).',
+    needsTeam: true,
+    needsThreshold: true,
+    minN: 1,
+    maxN: 5,
+    thresholdLabel: 'Margin',
+    disclosure: 'goals',
+  },
+];
+
+/**
+ * Human-readable condition label.
+ */
+export function conditionLabel(
+  template: number,
+  param: number,
+  homeTeam?: string,
+  awayTeam?: string,
+): string {
+  const home = homeTeam || 'Home team';
+  const away = awayTeam || 'Away team';
   switch (template) {
-    case TEMPLATE_BTTS: {
-      if (g1 > 0 && g2 > 0) return { state: "met", text: `Both teams have scored ✓ · ${score} ${clock}` };
-      if (g1 > 0) return { state: "tracking", text: `${home} have scored — waiting on ${away} · ${score} ${clock}` };
-      if (g2 > 0) return { state: "tracking", text: `${away} have scored — waiting on ${home} · ${score} ${clock}` };
-      return { state: "tracking", text: `Both teams yet to score · ${score} ${clock}` };
+    case TEMPLATE_BTTS:
+      return 'Both teams score';
+    case TEMPLATE_TEAM_WINS:
+      return Number(param) === 0 ? `${home} wins` : `${away} wins`;
+    case TEMPLATE_DRAW:
+      return 'Draw (full time)';
+    case TEMPLATE_TEAM_SCORES_AT_LEAST: {
+      const { team, n } = unpackTeamThreshold(param);
+      const side = team === 0 ? home : away;
+      return `${side} scores at least ${n}`;
     }
-    case TEMPLATE_TEAM_WINS: {
-      const team = param === 0 ? home : away;
-      const lead = param === 0 ? g1 - g2 : g2 - g1;
-      if (lead > 0) return { state: "met", text: `${team} lead ✓ — holding until the whistle · ${score} ${clock}` };
-      if (lead === 0) return { state: "tracking", text: `Level — ${team} need a goal · ${score} ${clock}` };
-      return { state: "tracking", text: `${team} trail by ${-lead} · ${score} ${clock}` };
+    case TEMPLATE_TOTAL_GOALS_AT_LEAST:
+      return `Total goals ≥ ${Number(param)}`;
+    case TEMPLATE_WINS_BY_AT_LEAST: {
+      const { team, n } = unpackTeamThreshold(param);
+      const side = team === 0 ? home : away;
+      return `${side} wins by ≥ ${n}`;
     }
-    case TEMPLATE_TOTAL_GOALS: {
-      const total = g1 + g2;
-      if (total >= param) return { state: "met", text: `${total} of ${param} goals — condition met ✓ · ${score} ${clock}` };
-      return { state: "tracking", text: `${total} of ${param} goals so far · ${score} ${clock}` };
-    }
+    case TEMPLATE_WINS_ON_PENS:
+      return Number(param) === 0
+        ? `${home} wins on penalties`
+        : `${away} wins on penalties`;
+    case TEMPLATE_GOES_TO_PENS:
+      return 'Goes to penalties';
     default:
-      return { state: "tracking", text: `${score} ${clock}` };
+      return 'Unknown condition';
   }
 }
 
-export const shootoutDisclosure =
-  "Wins on goals — extra time counts. A draw settled by penalty shootout does not satisfy this condition.";
+/** Build the on-chain param for the selected template + UI controls. */
+export function buildConditionParam(
+  template: number,
+  team: number,
+  threshold: number,
+): number {
+  switch (template) {
+    case TEMPLATE_TEAM_WINS:
+    case TEMPLATE_WINS_ON_PENS:
+      return team === 0 ? 0 : 1;
+    case TEMPLATE_TEAM_SCORES_AT_LEAST:
+    case TEMPLATE_WINS_BY_AT_LEAST:
+      return packTeamThreshold(team, threshold);
+    case TEMPLATE_TOTAL_GOALS_AT_LEAST:
+      return threshold;
+    default:
+      return 0;
+  }
+}
+
+export type LiveConditionState = 'tracking' | 'met';
+
+/**
+ * Client-side live tracking — display only.
+ * Pass shootout totals for templates 6–7.
+ */
+export function evaluateCondition(
+  template: number,
+  param: number,
+  homeGoals: number,
+  awayGoals: number,
+  homePens = 0,
+  awayPens = 0,
+): LiveConditionState {
+  switch (template) {
+    case TEMPLATE_BTTS:
+      return homeGoals > 0 && awayGoals > 0 ? 'met' : 'tracking';
+    case TEMPLATE_TEAM_WINS: {
+      const diff = param === 0 ? homeGoals - awayGoals : awayGoals - homeGoals;
+      return diff > 0 ? 'met' : 'tracking';
+    }
+    case TEMPLATE_DRAW:
+      return homeGoals === awayGoals ? 'met' : 'tracking';
+    case TEMPLATE_TEAM_SCORES_AT_LEAST: {
+      const { team, n } = unpackTeamThreshold(param);
+      const goals = team === 0 ? homeGoals : awayGoals;
+      return goals >= n ? 'met' : 'tracking';
+    }
+    case TEMPLATE_TOTAL_GOALS_AT_LEAST:
+      return homeGoals + awayGoals >= Number(param) ? 'met' : 'tracking';
+    case TEMPLATE_WINS_BY_AT_LEAST: {
+      const { team, n } = unpackTeamThreshold(param);
+      const diff = team === 0 ? homeGoals - awayGoals : awayGoals - homeGoals;
+      return diff >= n ? 'met' : 'tracking';
+    }
+    case TEMPLATE_WINS_ON_PENS: {
+      const diff = param === 0 ? homePens - awayPens : awayPens - homePens;
+      return diff > 0 ? 'met' : 'tracking';
+    }
+    case TEMPLATE_GOES_TO_PENS:
+      return homePens + awayPens > 0 ? 'met' : 'tracking';
+    default:
+      return 'tracking';
+  }
+}
+
+/** Plain-language status line for the in-play card (includes live score). */
+export function conditionStatusText(
+  template: number,
+  param: number,
+  homeGoals: number,
+  awayGoals: number,
+  homeTeam?: string,
+  awayTeam?: string,
+  homePens = 0,
+  awayPens = 0,
+  clock = '',
+): string {
+  const home = homeTeam ?? 'Home';
+  const away = awayTeam ?? 'Away';
+  const score = `${homeGoals}–${awayGoals}`;
+  const clk = clock ? ` ${clock}` : '';
+
+  if (template === TEMPLATE_BTTS) {
+    if (homeGoals > 0 && awayGoals > 0)
+      return `Both teams have scored ✓ · ${score}${clk}`;
+    if (homeGoals > 0)
+      return `${home} have scored — waiting on ${away} · ${score}${clk}`;
+    if (awayGoals > 0)
+      return `${away} have scored — waiting on ${home} · ${score}${clk}`;
+    return `Both teams yet to score · ${score}${clk}`;
+  }
+  if (template === TEMPLATE_TEAM_WINS) {
+    const team = param === 0 ? home : away;
+    const diff = param === 0 ? homeGoals - awayGoals : awayGoals - homeGoals;
+    if (diff > 0)
+      return `${team} lead ✓ — holding until the whistle · ${score}${clk}`;
+    if (diff === 0)
+      return `Level — ${team} need a goal (pens do not count) · ${score}${clk}`;
+    return `${team} trail by ${-diff} · ${score}${clk}`;
+  }
+  if (template === TEMPLATE_DRAW) {
+    if (homeGoals === awayGoals) return `Scores level ✓ · ${score}${clk}`;
+    return `Not level · ${score}${clk}`;
+  }
+  if (template === TEMPLATE_TEAM_SCORES_AT_LEAST) {
+    const { team, n } = unpackTeamThreshold(param);
+    const side = team === 0 ? home : away;
+    const goals = team === 0 ? homeGoals : awayGoals;
+    if (goals >= n) return `${side} has ${goals} — target ${n} ✓ · ${score}${clk}`;
+    return `${side} has ${goals} — need ${n} · ${score}${clk}`;
+  }
+  if (template === TEMPLATE_TOTAL_GOALS_AT_LEAST) {
+    const total = homeGoals + awayGoals;
+    const n = Number(param);
+    if (total >= n) return `${total} of ${n} goals — condition met ✓ · ${score}${clk}`;
+    return `${total} of ${n} goals so far · ${score}${clk}`;
+  }
+  if (template === TEMPLATE_WINS_BY_AT_LEAST) {
+    const { team, n } = unpackTeamThreshold(param);
+    const side = team === 0 ? home : away;
+    const diff = team === 0 ? homeGoals - awayGoals : awayGoals - homeGoals;
+    if (diff >= n) return `${side} ahead by ${diff} — margin ${n} ✓ · ${score}${clk}`;
+    if (diff > 0) return `${side} ahead by ${diff} — need ${n} · ${score}${clk}`;
+    if (diff === 0) return `Level — ${side} needs a ${n}-goal cushion · ${score}${clk}`;
+    return `${side} behind — need ${n}-goal win · ${score}${clk}`;
+  }
+  if (template === TEMPLATE_WINS_ON_PENS) {
+    const team = param === 0 ? home : away;
+    if (homePens + awayPens === 0) return `Waiting for penalty shootout · ${score}${clk}`;
+    const diff = param === 0 ? homePens - awayPens : awayPens - homePens;
+    if (diff > 0) return `${team} leads on pens ${homePens}–${awayPens} ✓`;
+    if (diff === 0) return `Pens level ${homePens}–${awayPens}`;
+    return `${team} behind on pens ${homePens}–${awayPens}`;
+  }
+  if (template === TEMPLATE_GOES_TO_PENS) {
+    if (homePens + awayPens > 0) return `Shootout underway ${homePens}–${awayPens} ✓`;
+    return `Waiting for penalty shootout · ${score}${clk}`;
+  }
+  return `Tracking · ${score}${clk}`;
+}

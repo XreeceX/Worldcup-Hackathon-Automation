@@ -9,23 +9,47 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        bg: "rgb(var(--bg) / <alpha-value>)",
+        surface: "rgb(var(--surface) / <alpha-value>)",
+        raised: "rgb(var(--raised) / <alpha-value>)",
+        edge: "rgb(var(--edge) / <alpha-value>)",
+        ink: "rgb(var(--ink) / <alpha-value>)",
+        muted: "rgb(var(--muted) / <alpha-value>)",
         pitch: {
-          950: "var(--pitch-950)",
-          900: "var(--pitch-900)",
-          800: "var(--pitch-800)",
-          700: "var(--pitch-700)",
+          300: "#6ee7a0",
+          400: "#4ade80",
+          500: "#22c55e",
+          600: "#16a34a",
+          700: "#15803d",
+          950: "#052e16",
         },
-        line: { 600: "var(--line-600)" },
-        chalk: {
-          100: "var(--chalk-100)",
-          400: "var(--chalk-400)",
-          600: "var(--chalk-600)",
+        gold: {
+          300: "#fde047",
+          400: "#facc15",
+          500: "#eab308",
         },
-        turf: { 400: "var(--turf-400)", 500: "var(--turf-500)" },
-        gold: { 400: "var(--gold-400)" },
-        voidc: { 400: "var(--void-400)" },
-        loss: { 400: "var(--loss-400)" },
-        info: { 400: "var(--info-400)" },
+        amber: {
+          400: "#fbbf24",
+          500: "#f59e0b",
+        },
+      },
+      fontFamily: {
+        sans: ["var(--font-sans)", "ui-sans-serif", "sans-serif"],
+        display: ["var(--font-display)", "ui-sans-serif", "sans-serif"],
+        mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
+      },
+      boxShadow: {
+        card: "0 1px 0 0 rgba(255,255,255,0.04) inset, 0 8px 24px -12px rgba(0,0,0,0.6)",
+        glow: "0 0 24px -6px rgba(34,197,94,0.45)",
+      },
+      keyframes: {
+        "pulse-dot": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.35" },
+        },
+      },
+      animation: {
+        "pulse-dot": "pulse-dot 1.6s ease-in-out infinite",
       },
     },
   },
